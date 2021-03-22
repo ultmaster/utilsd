@@ -1,14 +1,20 @@
 import dataclasses
 import json
+import logging
 import os
 import pprint
 import random
 from enum import Enum
+from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import torch
+from typing_extensions import runtime
 from .config.builtin import RuntimeConfig
 from .logging import print_log, setup_logger, reset_logger
+
+_runtime_config: Optional[RuntimeConfig] = None
 
 
 def seed_everything(seed):
@@ -44,7 +50,7 @@ def setup_distributed_training():
         return local_rank
 
 
-def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False):
+def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False) -> RuntimeConfig:
     setup_distributed_training()
     seed_everything(runtime_config.seed)
 
@@ -71,7 +77,13 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False):
         os.makedirs(runtime_config.tb_log_dir, exist_ok=True)
 
     reset_logger()
-    setup_logger('', log_file=os.path.join(runtime_config.output_dir, 'stdout.log'))
+    setup_logger('', log_file=os.path.join(runtime_config.output_dir, 'stdout.log'),
+                 log_level=logging.DEBUG if runtime_config.debug else logging.INFO)
+
+    global _runtime_config
+    _runtime_config = runtime_config
+
+    return runtime_config
 
 
 def print_config(config, dump_config=True, output_dir=None):
@@ -96,3 +108,16 @@ def print_config(config, dump_config=True, output_dir=None):
     if dump_config:
         with open(os.path.join(output_dir, 'config.json'), 'w') as fh:
             json.dump(config, fh, cls=Encoder)
+
+
+def get_runtime_config():
+    assert _runtime_config is not None, 'Runtime config is not initialized. Please call `setup_experiment()` first.'
+    return _runtime_config
+
+
+def get_output_dir() -> Path:
+    return get_runtime_config().output_dir
+
+
+def is_debugging() -> bool:
+    return get_runtime_config().debug
