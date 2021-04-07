@@ -10,7 +10,6 @@ from typing import Optional
 
 import numpy as np
 import torch
-from typing_extensions import runtime
 from .config.builtin import RuntimeConfig
 from .logging import print_log, setup_logger, reset_logger
 
