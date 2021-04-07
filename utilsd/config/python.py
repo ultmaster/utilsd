@@ -36,7 +36,7 @@ def _strip_optional(type_hint):
 
 
 def _is_path_like(type_hint):
-    return 'Path' in str(type_hint)
+    return str(type_hint) in ['pathlib.Path', 'Path', 'os.PathLike'] or type_hint == Path
 
 
 def _is_tuple(type_hint):
@@ -172,7 +172,7 @@ class PythonConfig:
             if _is_missing(value):
                 raise ValueError(f'{class_name}: {key} is not set')
 
-            # check type annoation
+            # check type annotation
             if field.type in [list, set, tuple, dict]:
                 raise ValueError(f'{class_name}: {field.type} cannot be list, set, tuple or dict. Please use XXX[Any] instead.')
 
