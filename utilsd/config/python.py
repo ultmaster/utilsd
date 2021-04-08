@@ -8,6 +8,7 @@ The second part of this file defines how `PythonConfig` can be written in yaml a
 import dataclasses
 import inspect
 import json
+import os
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
@@ -17,8 +18,6 @@ from typing import Any, Dict, TypeVar, Tuple, Union
 from mmcv.utils import Config
 
 T = TypeVar('T', bound='PythonConfig')
-
-PathLike = Union[str, Path]
 
 __all__ = ['PythonConfig']
 
@@ -36,7 +35,7 @@ def _strip_optional(type_hint):
 
 
 def _is_path_like(type_hint):
-    return str(type_hint) in ['pathlib.Path', 'Path', 'os.PathLike'] or type_hint == Path
+    return type_hint == Path or type_hint == os.PathLike
 
 
 def _is_tuple(type_hint):
