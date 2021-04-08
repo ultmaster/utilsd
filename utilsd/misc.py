@@ -118,5 +118,13 @@ def get_output_dir() -> Path:
     return get_runtime_config().output_dir
 
 
+def get_checkpoint_dir() -> Path:
+    return get_runtime_config().checkpoint_dir
+
+
+def get_tb_log_dir() -> Path:
+    return get_runtime_config().tb_log_dir
+
+
 def is_debugging() -> bool:
     return get_runtime_config().debug
