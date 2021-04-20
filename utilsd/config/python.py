@@ -35,7 +35,7 @@ def _strip_optional(type_hint):
 
 
 def _is_path_like(type_hint):
-    return type_hint == Path or type_hint == os.PathLike
+    return _strip_optional(type_hint) == Path or _strip_optional(type_hint) == os.PathLike
 
 
 def _is_tuple(type_hint):
