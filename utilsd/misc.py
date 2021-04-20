@@ -55,28 +55,27 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False) ->
 
     if runtime_config.output_dir is None:
         if 'PT_OUTPUT_DIR' in os.environ:
-            runtime_config.output_dir = os.environ['PT_OUTPUT_DIR']
+            runtime_config.output_dir = Path(os.environ['PT_OUTPUT_DIR'])
         else:
-            runtime_config.output_dir = './outputs'
+            runtime_config.output_dir = Path('./outputs')
 
     if enable_nni:
         import nni
         if nni.get_experiment_id() != 'STANDALONE':
-            runtime_config.output_dir = os.path.join(runtime_config.output_dir,
-                                                    nni.get_experiment_id(), str(nni.get_sequence_id()))
+            runtime_config.output_dir = runtime_config.output_dir / nni.get_experiment_id() / str(nni.get_sequence_id())
 
-    os.makedirs(runtime_config.output_dir, exist_ok=True)
+    runtime_config.output_dir.mkdir(exist_ok=True)
 
     if runtime_config.checkpoint_dir is None:
-        runtime_config.checkpoint_dir = os.path.join(runtime_config.output_dir, 'checkpoints')
-        os.makedirs(runtime_config.checkpoint_dir, exist_ok=True)
+        runtime_config.checkpoint_dir = runtime_config.output_dir / 'checkpoints'
+        runtime_config.checkpoint_dir.mkdir(exist_ok=True)
 
     if runtime_config.tb_log_dir is None:
-        runtime_config.tb_log_dir = os.path.join(runtime_config.output_dir, 'tb')
-        os.makedirs(runtime_config.tb_log_dir, exist_ok=True)
+        runtime_config.tb_log_dir = runtime_config.output_dir / 'checkpoints'
+        runtime_config.tb_log_dir.mkdir(exist_ok=True)
 
     reset_logger()
-    setup_logger('', log_file=os.path.join(runtime_config.output_dir, 'stdout.log'),
+    setup_logger('', log_file=(runtime_config.output_dir / 'stdout.log').as_posix(),
                  log_level=logging.DEBUG if runtime_config.debug else logging.INFO)
 
     global _runtime_config
