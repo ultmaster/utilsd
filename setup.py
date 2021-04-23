@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='utilsd',
-    version='0.0.3',
+    version='0.0.4',
     author='Yuge Zhang',
     author_email='scottyugochang@gmail.com',
     description='Common utils for deep learning.',
