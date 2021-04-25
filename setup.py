@@ -19,6 +19,12 @@ setuptools.setup(
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.7',
+    install_requires=[
+        'addict',
+        'numpy',
+        'pyyaml',
+        'yapf',
+    ],
     extras_require={
         'full': ['torch>=1.7.1'],
     }
