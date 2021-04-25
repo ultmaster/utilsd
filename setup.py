@@ -20,7 +20,6 @@ setuptools.setup(
     ],
     python_requires='>=3.7',
     extras_require={
-        'mmcv': ['mmcv>=1.2.7'],
-        'full': ['mmcv>=1.2.7', 'torch>=1.7.1'],
+        'full': ['torch>=1.7.1'],
     }
 )

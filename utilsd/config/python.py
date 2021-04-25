@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, TypeVar, Tuple, Union
 
-from mmcv.utils import Config
+from ..fileio.config import Config
 
 T = TypeVar('T', bound='PythonConfig')
 
