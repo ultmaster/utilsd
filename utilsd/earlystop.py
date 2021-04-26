@@ -57,7 +57,7 @@ class EarlyStop:
 
         if self.is_better(current, self.best):
             self.best = current
-            print_log(f'Hit best record: {self.best}', __name__)
+            print_log(f'Earlystop hit best record: {self.best}', __name__)
             self.num_bad_epochs = 0
             return EarlyStopStatus.BEST
 
