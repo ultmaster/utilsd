@@ -19,8 +19,7 @@ class AverageMeter(object):
         >>> losses.update(loss_value, batch_size)
     """
 
-    def __init__(self, skip_nan=True):
-        self.skip_nan = skip_nan
+    def __init__(self):
         self.reset()
 
     def reset(self):
@@ -30,8 +29,6 @@ class AverageMeter(object):
         self.count = 0
 
     def update(self, val, n=1):
-        if self.skip_nan and np.isnan(val):
-            return
         self.val = val
         self.sum += val * n
         self.count += n
