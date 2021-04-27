@@ -54,6 +54,9 @@ class MetricMeter(object):
         self.meters = defaultdict(AverageMeter)
         self.delimiter = delimiter
 
+    def __iter__(self):
+        return iter(self.meters)
+
     def __getitem__(self, item):
         return self.meters[item]
 
