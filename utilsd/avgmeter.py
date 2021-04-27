@@ -78,3 +78,7 @@ class MetricMeter(object):
                 '{} {:.4f} ({:.4f})'.format(name, meter.val, meter.avg)
             )
         return self.delimiter.join(output_str)
+
+    def reset(self):
+        for meter in self.meters.values():
+            meter.reset()
