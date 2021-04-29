@@ -14,6 +14,7 @@ from .config.builtin import RuntimeConfig
 from .logging import print_log, setup_logger, reset_logger
 
 _runtime_config: Optional[RuntimeConfig] = None
+_use_cuda: Optional[bool] = None
 
 
 def seed_everything(seed):
@@ -127,3 +128,10 @@ def get_tb_log_dir() -> Path:
 
 def is_debugging() -> bool:
     return get_runtime_config().debug
+
+
+def use_cuda() -> bool:
+    global _use_cuda
+    if _use_cuda is None:
+        _use_cuda = get_runtime_config().use_cuda and torch.cuda.is_available()
+    return _use_cuda

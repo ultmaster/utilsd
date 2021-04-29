@@ -11,8 +11,8 @@ class RuntimeConfig(PythonConfig):
     output_dir: Optional[Path] = None
     checkpoint_dir: Optional[Path] = None
     tb_log_dir: Optional[Path] = None
-    log_dir: Optional[Path] = None
     debug: bool = False
+    use_cuda: bool = True
 
     def check_path(self, path):
         return True
