@@ -71,7 +71,7 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False) ->
         runtime_config.checkpoint_dir.mkdir(exist_ok=True)
 
     if runtime_config.tb_log_dir is None:
-        runtime_config.tb_log_dir = runtime_config.output_dir / 'checkpoints'
+        runtime_config.tb_log_dir = runtime_config.output_dir / 'tb'
         runtime_config.tb_log_dir.mkdir(exist_ok=True)
 
     reset_logger()
