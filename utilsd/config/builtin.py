@@ -13,3 +13,6 @@ class RuntimeConfig(PythonConfig):
     tb_log_dir: Optional[Path] = None
     log_dir: Optional[Path] = None
     debug: bool = False
+
+    def check_path(self, path):
+        return True

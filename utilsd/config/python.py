@@ -157,6 +157,9 @@ class PythonConfig:
         """
         return self._meta
 
+    def check_path(self, path) -> bool:
+        return not self._check_path or path.exists()
+
     def validate(self) -> None:
         """
         Validate the config object and raise Exception if it's ill-formed.
@@ -180,8 +183,8 @@ class PythonConfig:
                 raise ValueError(f'{class_name}: {value} failed to pass type check of {field.type}')
 
             # check path
-            if self._check_path and isinstance(value, Path):
-                assert value.exists(), f'Path {value} does not exist.'
+            if isinstance(value, Path):
+                assert self.check_path(value), f'Path {value} does not exist.'
 
             # check value range
             rule = config._validation_rules.get(key)
@@ -284,6 +287,8 @@ class PythonConfig:
             t = _strip_optional(t)
             if t in (int, float, str):
                 return t
+            if t == Path:
+                return str
             if t == bool:
                 return str2bool
             return str2obj
