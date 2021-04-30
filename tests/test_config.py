@@ -1,15 +1,15 @@
 import os
 
-from utilsd.config import PythonConfig, dataclass
+from utilsd.config import PythonConfig, configclass
 from unittest.mock import patch
 
 
-@dataclass(init=False)
+@configclass
 class Bar(PythonConfig):
     n: int
 
 
-@dataclass(init=False)
+@configclass
 class Foo(PythonConfig):
     a: int
     b: float
