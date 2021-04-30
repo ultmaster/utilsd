@@ -1,6 +1,10 @@
 from dataclasses import dataclass
+from functools import partial
 
 from .builtin import RuntimeConfig
 from .python import PythonConfig
 
-__all__ = ['PythonConfig', 'RuntimeConfig', 'dataclass']
+configclass = partial(dataclass, init=False)
+
+
+__all__ = ['PythonConfig', 'RuntimeConfig', 'configclass']
