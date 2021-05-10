@@ -83,6 +83,14 @@ def _construct_with_type(value, type_hint) -> Any:
         value = tuple([_construct_with_type(v, arg) for v, arg in zip(value, cls.__args__)])
     if type_name.startswith('Dict['):
         value = {_construct_with_type(k, cls.__args__[0]): _construct_with_type(v, cls.__args__[1]) for k, v in value.items()}
+    if type_name.startswith('Union['):
+        for sub_type_name in type_hint.__args__:
+            try:
+                value = _construct_with_type(value, sub_type_name)
+                cls = _strip_optional(sub_type_name)
+                break
+            except:
+                pass
 
     # deal with primitive types:
     # in json, it's impossible to write float and int as key of dict;
