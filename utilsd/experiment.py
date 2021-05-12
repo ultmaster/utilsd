@@ -133,5 +133,8 @@ def is_debugging() -> bool:
 def use_cuda() -> bool:
     global _use_cuda
     if _use_cuda is None:
-        _use_cuda = get_runtime_config().use_cuda and torch.cuda.is_available()
+        try:
+            _use_cuda = get_runtime_config().use_cuda and torch.cuda.is_available()
+        except AssertionError:
+            return torch.cuda.is_available()
     return _use_cuda
