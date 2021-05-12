@@ -130,8 +130,10 @@ def is_debugging() -> bool:
     return get_runtime_config().debug
 
 
-def use_cuda() -> bool:
+def use_cuda(enable: Optional[bool] = None) -> bool:
     global _use_cuda
+    if enable is not None:
+        _use_cuda = enable
     if _use_cuda is None:
         try:
             _use_cuda = get_runtime_config().use_cuda and torch.cuda.is_available()
