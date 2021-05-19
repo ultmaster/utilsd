@@ -13,6 +13,11 @@ def reset_logger():
         logging.getLogger().handlers.clear()
 
 
+def mute_logger(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.WARNING)
+
+
 def setup_logger(name, log_file=None, log_level=logging.INFO, file_mode='w'):
     """Initialize and get a logger by name.
 

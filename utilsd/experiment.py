@@ -6,12 +6,12 @@ import pprint
 import random
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import torch
 from .config.builtin import RuntimeConfig
-from .logging import print_log, setup_logger, reset_logger
+from .logging import mute_logger, print_log, setup_logger, reset_logger
 
 _runtime_config: Optional[RuntimeConfig] = None
 _use_cuda: Optional[bool] = None
@@ -50,7 +50,10 @@ def setup_distributed_training():
         return local_rank
 
 
-def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False) -> RuntimeConfig:
+def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False,
+                     logger_blacklist: Optional[List[str]] = None) -> RuntimeConfig:
+    if logger_blacklist is None:
+        logger_blacklist = ['numba']
     setup_distributed_training()
     seed_everything(runtime_config.seed)
 
@@ -78,6 +81,8 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False) ->
     reset_logger()
     setup_logger('', log_file=(runtime_config.output_dir / 'stdout.log').as_posix(),
                  log_level=logging.DEBUG if runtime_config.debug else logging.INFO)
+    for logger in logger_blacklist:
+        mute_logger(logger)
 
     global _runtime_config
     _runtime_config = runtime_config
