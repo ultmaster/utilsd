@@ -1,4 +1,4 @@
-from utilsd.search import Choice, sample_from, iterate_over
+from utilsd.search import Choice, sample_from, iterate_over, size
 
 
 def test_sample():
@@ -15,3 +15,4 @@ def test_sample():
 
     assert len(set([str(sample['_meta']) for sample in iterate_over(space)])) == 108
     assert len(list(iterate_over(space))) == 108
+    assert len(list(iterate_over(space))) == size(space)

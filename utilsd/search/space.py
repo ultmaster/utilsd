@@ -32,6 +32,24 @@ class Choice(Space):
     def __iter__(self):
         return iter(self.choices)
 
+    def __len__(self):
+        return len(self.choices)
+
+
+def size(space: Any):
+    sz = 1
+    def _measure(space: Any):
+        nonlocal sz
+        if isinstance(space, Space):
+            sz *= len(space)
+        if isinstance(space, (tuple, list)):
+            [_measure(s) for s in space]
+        if isinstance(space, dict):
+            [_measure(s) for s in space.values()]
+
+    _measure(space)
+    return sz
+
 
 def sample_from(space: Any):
     meta = {}
