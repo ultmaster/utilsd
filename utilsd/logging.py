@@ -66,7 +66,10 @@ def setup_logger(name, log_file=None, log_level=logging.INFO, file_mode='w'):
         file_handler = logging.FileHandler(log_file, file_mode)
         handlers.append(file_handler)
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    if log_level == logging.DEBUG:
+        formatter = logging.Formatter('%(asctime)s - %(processName)s(%(threadName)s) - %(name)s - %(levelname)s - %(message)s')
+    else:
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     for handler in handlers:
         handler.setFormatter(formatter)
         handler.setLevel(log_level)
