@@ -10,7 +10,7 @@ def shuffle_(lst):
     return lst
 
 
-def offline_search(space: Any, budget: int, method: str = 'random', output_file: Optional[Any] = None):
+def offline_search(space: Any, budget: int, method: str = 'random', out_file: Optional[Any] = None):
     if method == 'random':
         if size(space) < 1e6:
             samples = shuffle_(list(iterate_over(space)))[:budget]
@@ -20,6 +20,6 @@ def offline_search(space: Any, budget: int, method: str = 'random', output_file:
         samples = shuffle_(list(iterate_over(space)))[:budget]
     else:
         raise ValueError(f'Unsupported method: {method}')
-    if output_file is not None:
-        dump(samples, output_file)
+    if out_file is not None:
+        dump(samples, out_file)
     return samples
