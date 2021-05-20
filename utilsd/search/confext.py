@@ -1,4 +1,6 @@
 import argparse
+import copy
+import random
 import os
 
 import yaml
@@ -25,6 +27,13 @@ def _import(target: str):
     return getattr(module, identifier)
 
 
+def default_convert(config):
+    config['_meta'] = copy.deepcopy(config)
+    config.setdefault('runtime', {})
+    config['runtime']['seed'] = random.randint(0, 10000)
+    return config
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('library', type=str)
@@ -44,7 +53,10 @@ if __name__ == '__main__':
         data = data[args.index]
 
     if args.converter is not None:
-        _import(args.converter)(data)
+        if args.converter == 'default':
+            data = default_convert(data)
+        else:
+            data = _import(args.converter)(data)
     if args.base is not None:
         data['_base_'] = os.path.abspath(args.base)
 
