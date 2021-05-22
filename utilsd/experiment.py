@@ -101,7 +101,7 @@ def print_config(config, dump_config=True, output_dir=None):
         config_meta = None
     else:
         if output_dir is None:
-            output_dir = config.runtime.output_dir
+            output_dir = get_output_dir()
         config_meta = config.meta()
         config = dataclasses.asdict(config)
 
