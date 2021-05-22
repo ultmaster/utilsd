@@ -95,6 +95,8 @@ def print_config(config, dump_config=True, output_dir=None):
         def default(self, obj):
             if isinstance(obj, Enum):
                 return obj.value
+            if isinstance(obj, Path):
+                return obj.as_posix()
             return super().default(obj)
 
     if isinstance(config, dict):
