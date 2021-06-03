@@ -13,9 +13,10 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, TypeVar, Tuple, Union
+from typing import Any, Dict, TypeVar, Tuple, Union, Type
 
 from ..fileio.config import Config
+from .registry import Registry
 
 T = TypeVar('T', bound='PythonConfig')
 
@@ -34,6 +35,10 @@ def _strip_optional(type_hint):
     return type_hint
 
 
+def _strip_import_path(type_name):
+    return type_name.replace('typing.', '').replace('utilsd.config.registry.', '')
+
+
 def _is_path_like(type_hint):
     return _strip_optional(type_hint) == Path or _strip_optional(type_hint) == os.PathLike
 
@@ -44,7 +49,9 @@ def _is_tuple(type_hint):
 
 def _is_type(value, type_hint) -> bool:
     # used in validation, to check whether value is of `type_hint`
-    type_name = str(type_hint).replace('typing.', '')
+    type_name = _strip_import_path(str(type_hint))
+    if type_name.startswith('RegistryConfig['):
+        return True
     if type_name == 'Any':
         return True
     if type_name.startswith('Union['):
@@ -72,7 +79,7 @@ def _construct_with_type(value, type_hint) -> Any:
     if value is None:
         return value
     cls = _strip_optional(type_hint)
-    type_name = str(cls).replace('typing.', '')
+    type_name = _strip_import_path(str(cls))
     # relative paths loaded from config file are not relative to pwd
     if _is_path_like(cls):
         value = Path(value)
@@ -105,6 +112,13 @@ def _construct_with_type(value, type_hint) -> Any:
         value = cls(value)
     # convert nested dict to config type
     if isinstance(value, dict):
+        if type_name.startswith('RegistryConfig['):
+            registry = cls.__args__[0]
+            assert isinstance(registry, Registry), 'Type in RegisterConfig should be a registry.'
+            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+            assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
+            cls = PythonConfig.from_type(registry.get(value['type']))
+            value.pop('type')
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
     return value
@@ -325,3 +339,20 @@ class PythonConfig:
                     else:
                         parser.add_argument('--' + name, *shortcut, type=inferred_type, default=SUPPRESS)
         return names
+
+    @classmethod
+    def from_type(cls, type: Type):
+        class_name = type.__name__ + 'Config'
+        init_signature = inspect.signature(type.__init__)
+        fields = []
+        for param in init_signature.parameters.values():
+            if param.name == 'self':
+                continue
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue
+            assert param.annotation != param.empty, f'Parameter must have annotation: {param}'
+            if param.default != param.empty:
+                fields.append((param.name, param.annotation, param.default))
+            else:
+                fields.append((param.name, param.annotation))
+        return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False)
