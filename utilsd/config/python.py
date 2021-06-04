@@ -13,14 +13,23 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, TypeVar, Tuple, Union, Type
+from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic
 
 from ..fileio.config import Config
+from .exception import ValidationError
 from .registry import Registry
 
-T = TypeVar('T', bound='PythonConfig')
+T = TypeVar('T')
 
-__all__ = ['PythonConfig']
+class ClassConfig(Generic[T]):
+    pass
+
+
+class RegistryConfig(Generic[T]):
+    pass
+
+
+__all__ = ['PythonConfig', 'ClassConfig', 'RegistryConfig']
 
 
 def _is_missing(obj: Any) -> bool:
@@ -36,7 +45,7 @@ def _strip_optional(type_hint):
 
 
 def _strip_import_path(type_name):
-    return type_name.replace('typing.', '').replace('utilsd.config.registry.', '')
+    return type_name.replace('typing.', '').replace('utilsd.config.python.', '')
 
 
 def _is_path_like(type_hint):
@@ -50,7 +59,7 @@ def _is_tuple(type_hint):
 def _is_type(value, type_hint) -> bool:
     # used in validation, to check whether value is of `type_hint`
     type_name = _strip_import_path(str(type_hint))
-    if type_name.startswith('RegistryConfig['):
+    if type_name.startswith('RegistryConfig[') or type_name.startswith('ClassConfig['):
         return True
     if type_name == 'Any':
         return True
@@ -119,6 +128,8 @@ def _construct_with_type(value, type_hint) -> Any:
             assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
             cls = PythonConfig.from_type(registry.get(value['type']))
             value.pop('type')
+        if type_name.startswith('ClassConfig['):
+            cls = PythonConfig.from_type(cls.__args__[0])
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
     return value
@@ -159,12 +170,12 @@ class PythonConfig:
                 try:
                     value = _construct_with_type(value, field.type)
                 except Exception as e:
-                    raise ValueError(f'{class_name}: {field.name} construction error. {repr(e)}')
+                    raise ValidationError(f'{class_name}: {field.name} construction error. {repr(e)}')
             setattr(self, field.name, value)
         if kwargs:
             cls = type(self).__name__
             fields = ', '.join(kwargs.keys())
-            raise ValueError(f'{cls}: Unrecognized fields {fields}')
+            raise ValidationError(f'{cls}: Unrecognized fields {fields}')
         self.validate()
 
     def asdict(self) -> Dict[str, Any]:
@@ -194,15 +205,15 @@ class PythonConfig:
 
             # check existence
             if _is_missing(value):
-                raise ValueError(f'{class_name}: {key} is not set')
+                raise ValidationError(f'{class_name}: {key} is not set')
 
             # check type annotation
             if field.type in [list, set, tuple, dict]:
-                raise ValueError(f'{class_name}: {field.type} cannot be list, set, tuple or dict. Please use XXX[Any] instead.')
+                raise ValidationError(f'{class_name}: {field.type} cannot be list, set, tuple or dict. Please use XXX[Any] instead.')
 
             # check type
             if not _is_type(value, field.type):
-                raise ValueError(f'{class_name}: {value} failed to pass type check of {field.type}')
+                raise ValidationError(f'{class_name}: {value} failed to pass type check of {field.type}')
 
             # check path
             if isinstance(value, Path):
@@ -214,15 +225,15 @@ class PythonConfig:
                 try:
                     result = rule(value)
                 except Exception:
-                    raise ValueError(f'{class_name}: {key} has bad value {repr(value)}')
+                    raise ValidationError(f'{class_name}: {key} has bad value {repr(value)}')
 
                 if isinstance(result, bool):
                     if not result:
-                        raise ValueError(f'{class_name}: {key} ({repr(value)}) is out of range')
+                        raise ValidationError(f'{class_name}: {key} ({repr(value)}) is out of range')
                 else:
                     ok, message = result
                     if not ok:
-                        raise ValueError(f'{class_name}: {key} {message}')
+                        raise ValidationError(f'{class_name}: {key} {message}')
 
             # check nested config
             if isinstance(value, PythonConfig):
@@ -232,14 +243,14 @@ class PythonConfig:
         try:
             result = self.post_validate()
         except Exception as e:
-            raise ValueError(f'{class_name}: validation failed. {repr(e)}')
+            raise ValidationError(f'{class_name}: validation failed. {repr(e)}')
         if isinstance(result, bool):
             if not result:
-                raise ValueError(f'{class_name}: post validation failed')
+                raise ValidationError(f'{class_name}: post validation failed')
         else:
             ok, message = result
             if not ok:
-                raise ValueError(f'{class_name}: post validation failed with: {message}')
+                raise ValidationError(f'{class_name}: post validation failed with: {message}')
 
     def post_validate(self) -> Union[bool, Tuple[bool, str]]:
         return True
@@ -284,7 +295,7 @@ class PythonConfig:
 
         if not allow_rest:
             if rest:
-                raise ValueError(f'Unexpected command line arguments: {rest}')
+                raise ValidationError(f'Unexpected command line arguments: {rest}')
             return configs
         else:
             return configs, rest

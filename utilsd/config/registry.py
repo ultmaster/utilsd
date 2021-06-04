@@ -1,13 +1,6 @@
 # Modified from https://github.com/open-mmlab/mmcv/blob/master/mmcv/utils/registry.py
 
 import inspect
-from typing import TypeVar, Generic
-
-
-T = TypeVar('T')
-
-class RegistryConfig(Generic[T]):
-    pass
 
 
 class Registry(type):

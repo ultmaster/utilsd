@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from functools import partial
 
 from .builtin import RuntimeConfig
-from .python import PythonConfig
-from .registry import Registry, RegistryConfig
+from .exception import ValidationError
+from .python import PythonConfig, RegistryConfig, ClassConfig
+from .registry import Registry
 
 configclass = partial(dataclass, init=False)
 
 
-__all__ = ['PythonConfig', 'RuntimeConfig', 'Registry', 'RegistryConfig', 'configclass']
+__all__ = ['ClassConfig', 'PythonConfig', 'RuntimeConfig', 'Registry',
+           'RegistryConfig', 'ValidationError', 'configclass']

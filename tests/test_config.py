@@ -1,7 +1,8 @@
 import os
-from utilsd.config.registry import RegistryConfig
+from utilsd.config.exception import ValidationError
 
-from utilsd.config import PythonConfig, Registry, RegistryConfig, configclass
+import pytest
+from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, configclass
 from unittest.mock import patch
 
 
@@ -40,6 +41,11 @@ class FooM(PythonConfig):
     m: RegistryConfig[Converters]
 
 
+@configclass
+class FooN(PythonConfig):
+    n: ClassConfig[Converter1]
+
+
 def test_python_config():
     assert Foo(a=1, b=2.0, c={'n': 0}).c.n == 0
 
@@ -48,8 +54,14 @@ def test_registry_config():
     assert FooM(m={'type': 'Converter1', 'a': 1, 'b': 2}).m.a == 1
 
 
+def test_class_config():
+    assert FooN(n={'a': 1, 'b': 2}).n.a == 1
+    with pytest.raises(ValidationError):
+        FooN(n={'a': 'aaa', 'b': 2})
+
+
 def test_registry():
-    assert len(Converters) == 1
+    assert len(Converters) == 2
     assert 'Converter1' in Converters
     assert Converters.get('Converter1') == Converter1
 
@@ -69,3 +81,4 @@ if __name__ == '__main__':
     test_parse_command_line()
     test_registry()
     test_registry_config()
+    test_class_config()
