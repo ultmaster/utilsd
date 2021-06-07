@@ -55,6 +55,16 @@ class InitWithComplexType:
             self.converter = converter.build()
 
 
+class DependencyInjectionClass:
+    def __init__(self, m: Converter1):
+        self.m = m
+
+
+@configclass
+class DependencyInjectionClassType(PythonConfig):
+    c: ClassConfig[DependencyInjectionClass]
+
+
 @configclass
 class CfgInitWithComplexType(PythonConfig):
     m: ClassConfig[InitWithComplexType]
@@ -67,6 +77,12 @@ class FooN(PythonConfig):
 
 def test_python_config():
     assert Foo(a=1, b=2.0, c={'n': 0}).c.n == 0
+
+
+def test_python_config_with_extra_kwargs():
+    pass
+    # TODO
+    # config = DependencyInjectionClassType(c={})
 
 
 def test_registry_config():

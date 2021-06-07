@@ -356,22 +356,24 @@ class PythonConfig:
         return names
 
     @classmethod
-    def from_type(cls, type: Type):
-        class_name = type.__name__ + 'Config'
-        init_signature = inspect.signature(type.__init__)
+    def from_type(cls, t: Type):
+        class_name = t.__name__ + 'Config'
+        init_signature = inspect.signature(t.__init__)
         fields = []
         for param in init_signature.parameters.values():
             if param.name == 'self':
                 continue
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
+
+            # TODO: fix type annotation for dependency injection
             assert param.annotation != param.empty, f'Parameter must have annotation: {param}'
             if param.default != param.empty:
                 fields.append((param.name, param.annotation, param.default))
             else:
                 fields.append((param.name, param.annotation))
 
-        def type_fn(self): return type
+        def type_fn(self): return t
         def build_fn(self, **kwargs):
             result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
             for k in kwargs:
