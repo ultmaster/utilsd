@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Union
 
 import pytest
 from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, ValidationError, configclass
@@ -46,6 +46,20 @@ class CfgRegistryDict(PythonConfig):
     m: Dict[str, RegistryConfig[Converters]]
 
 
+class InitWithComplexType:
+    def __init__(self, converter: Union[Converter1, ClassConfig[Converter1]]):
+        if isinstance(converter, Converter1):
+            self.converter = converter
+        else:
+            print(converter)
+            self.converter = converter.build()
+
+
+@configclass
+class CfgInitWithComplexType(PythonConfig):
+    m: ClassConfig[InitWithComplexType]
+
+
 @configclass
 class FooN(PythonConfig):
     n: ClassConfig[Converter1]
@@ -69,6 +83,14 @@ def test_registry_config_complex():
     assert config.m['b'].type() == Converter2
     assert config.m['a'].a == 1
     assert config.m['b'].a == 3
+
+    assert isinstance(InitWithComplexType(config.m['a']).converter, Converter1)
+    assert isinstance(InitWithComplexType(config.m['a'].build()).converter, Converter1)
+
+
+def test_registry_config_complex_union():
+    config = CfgInitWithComplexType(m=dict(converter={'a': 1, 'b': 2}))
+    assert isinstance(config.m.build().converter, Converter1)
 
 
 def test_class_config():

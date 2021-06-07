@@ -9,6 +9,7 @@ import dataclasses
 import inspect
 import json
 import os
+import warnings
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
@@ -61,7 +62,7 @@ def _is_type(value, type_hint) -> bool:
     # used in validation, to check whether value is of `type_hint`
     type_name = _strip_import_path(str(type_hint))
     if type_name.startswith('RegistryConfig[') or type_name.startswith('ClassConfig['):
-        return True
+        return dataclasses.is_dataclass(value)
     if type_name == 'Any':
         return True
     if type_name.startswith('Union['):
@@ -133,6 +134,8 @@ def _construct_with_type(value, type_hint) -> Any:
             cls = PythonConfig.from_type(cls.__args__[0])
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
+        elif not type_name.startswith('Dict['):
+            raise TypeError("'{cls}' is not a config class.")
     return value
 
 
@@ -369,7 +372,13 @@ class PythonConfig:
                 fields.append((param.name, param.annotation))
 
         def type_fn(self): return type
-        def build_fn(self): return self.type()(**dataclasses.asdict(self))
+        def build_fn(self, **kwargs):
+            result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
+            for k in kwargs:
+                if k in result:
+                    warnings.warn(f'Duplicated entry for {k}: {result[k]}, overwritten with {kwargs[k]}')
+                result[k] = kwargs[k]
+            return self.type()(**result)
 
         return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False,
                                           namespace={'type': type_fn, 'build': build_fn})
