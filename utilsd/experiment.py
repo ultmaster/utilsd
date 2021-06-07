@@ -114,6 +114,9 @@ def print_config(config, dump_config=True, output_dir=None):
     if dump_config:
         with open(os.path.join(output_dir, 'config.json'), 'w') as fh:
             json.dump(config, fh, cls=Encoder)
+        if config_meta is not None:
+            with open(os.path.join(output_dir, 'config_meta.json'), 'w') as fh:
+                json.dump(config_meta, fh, cls=Encoder)
 
 
 def get_runtime_config():
