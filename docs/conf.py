@@ -10,17 +10,29 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))
 
+version_file = '../utilsd/__init__.py'
+
+def get_version(rel_path):
+    with open(rel_path) as f:
+        for line in f.readlines():
+            if line.startswith('__version__'):
+                delim = '"' if '"' in line else "'"
+                return line.split(delim)[1]
+    raise RuntimeError("Unable to find version string.")
+
+__version__ = get_version(version_file)
 
 # -- Project information -----------------------------------------------------
 
 project = 'utilsd'
-copyright = '2021, utilsd dev'
+copyright = '2021, Yuge Zhang'
 author = 'utilsd dev'
-
+version = __version__
+release = __version__
 
 # -- General configuration ---------------------------------------------------
 
@@ -28,6 +40,7 @@ author = 'utilsd dev'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.autodoc'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
