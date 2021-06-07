@@ -23,7 +23,7 @@ jobs:
     - name: Install package
       run: |
         python setup.py develop
-        pip install .[full]
+        pip install -e .[full]
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names

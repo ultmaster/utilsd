@@ -1,6 +1,8 @@
 # Common utils for deep learning
 
-[![build](https://github.com/ultmaster/utilsd/actions/workflows/python-test.yml/badge.svg)](https://github.com/ultmaster/utilsd/actions/workflows/python-test.yml)
+[![build](https://github.com/ultmaster/utilsd/actions/workflows/python-test.yml/badge.svg)](https://github.com/ultmaster/utilsd/actions/workflows/python-test.yml) [![codecov](https://codecov.io/gh/ultmaster/utilsd/branch/master/graph/badge.svg?token=CKMH54LMRM)](https://codecov.io/gh/ultmaster/utilsd) [![Documentation Status](https://readthedocs.org/projects/utilsd/badge/?version=latest)](https://utilsd.readthedocs.io/en/latest/?badge=latest)
+
+Documentation: https://utilsd.readthedocs.io/en/stable/
 
 ```
 pip install utilsd
