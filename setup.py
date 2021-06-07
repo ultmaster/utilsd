@@ -40,5 +40,6 @@ setuptools.setup(
     ],
     extras_require={
         'full': ['torch>=1.7.1'],
+        'docs': ['sphinx'],
     }
 )
