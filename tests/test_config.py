@@ -59,6 +59,8 @@ def test_registry_config():
     config = CfgRegistryNormal(m={'type': 'Converter1', 'a': 1, 'b': 2})
     assert config.m.a == 1
     assert config.m.type() == Converter1
+    assert config.m.build().a == 1
+    assert isinstance(config.m.build(), Converter1)
 
 
 def test_registry_config_complex():

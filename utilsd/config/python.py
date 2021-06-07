@@ -21,6 +21,7 @@ from .registry import Registry
 
 T = TypeVar('T')
 
+
 class ClassConfig(Generic[T]):
     pass
 
@@ -366,5 +367,9 @@ class PythonConfig:
                 fields.append((param.name, param.annotation, param.default))
             else:
                 fields.append((param.name, param.annotation))
-        type_fn = lambda self: type
-        return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False, namespace={'type': type_fn})
+
+        def type_fn(self): return type
+        def build_fn(self): return self.type()(**dataclasses.asdict(self))
+
+        return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False,
+                                          namespace={'type': type_fn, 'build': build_fn})
