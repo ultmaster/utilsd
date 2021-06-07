@@ -366,4 +366,5 @@ class PythonConfig:
                 fields.append((param.name, param.annotation, param.default))
             else:
                 fields.append((param.name, param.annotation))
-        return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False)
+        type_fn = lambda self: type
+        return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False, namespace={'type': type_fn})

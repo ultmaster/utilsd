@@ -1,8 +1,8 @@
 import os
-from utilsd.config.exception import ValidationError
+from typing import Dict
 
 import pytest
-from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, configclass
+from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, ValidationError, configclass
 from unittest.mock import patch
 
 
@@ -37,8 +37,13 @@ class Foo(PythonConfig):
 
 
 @configclass
-class FooM(PythonConfig):
+class CfgRegistryNormal(PythonConfig):
     m: RegistryConfig[Converters]
+
+
+@configclass
+class CfgRegistryDict(PythonConfig):
+    m: Dict[str, RegistryConfig[Converters]]
 
 
 @configclass
@@ -51,7 +56,17 @@ def test_python_config():
 
 
 def test_registry_config():
-    assert FooM(m={'type': 'Converter1', 'a': 1, 'b': 2}).m.a == 1
+    config = CfgRegistryNormal(m={'type': 'Converter1', 'a': 1, 'b': 2})
+    assert config.m.a == 1
+    assert config.m.type() == Converter1
+
+
+def test_registry_config_complex():
+    config = CfgRegistryDict(m=dict(a={'type': 'Converter1', 'a': 1, 'b': 2}, b={'type': 'Converter2', 'a': 3, 'b': 4}))
+    assert config.m['a'].type() == Converter1
+    assert config.m['b'].type() == Converter2
+    assert config.m['a'].a == 1
+    assert config.m['b'].a == 3
 
 
 def test_class_config():
