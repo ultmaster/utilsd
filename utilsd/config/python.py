@@ -9,7 +9,6 @@ import dataclasses
 import inspect
 import json
 import os
-import warnings
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
@@ -102,13 +101,13 @@ def _construct_with_type(value, type_hint) -> Any:
     if type_name.startswith('Dict['):
         value = {_construct_with_type(k, cls.__args__[0]): _construct_with_type(v, cls.__args__[1]) for k, v in value.items()}
     if type_name.startswith('Union['):
+        exceptions = []
         for sub_type_name in type_hint.__args__:
             try:
-                value = _construct_with_type(value, sub_type_name)
-                cls = _strip_optional(sub_type_name)
-                break
-            except:
-                pass
+                return _construct_with_type(value, sub_type_name)
+            except Exception as e:
+                exceptions.append(e)
+        raise ValidationError(';  '.join([str(e) for e in exceptions]))
 
     # deal with primitive types:
     # in json, it's impossible to write float and int as key of dict;
@@ -135,7 +134,7 @@ def _construct_with_type(value, type_hint) -> Any:
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
         elif not type_name.startswith('Dict['):
-            raise TypeError("'{cls}' is not a config class.")
+            raise TypeError(f"'{cls}' is not a config class.")
     return value
 
 
@@ -377,8 +376,7 @@ class PythonConfig:
         def build_fn(self, **kwargs):
             result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
             for k in kwargs:
-                if k in result:
-                    warnings.warn(f'Duplicated entry for {k}: {result[k]}, overwritten with {kwargs[k]}')
+                # silently overwrite the arguments with given ones.
                 result[k] = kwargs[k]
             return self.type()(**result)
 
