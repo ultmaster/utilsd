@@ -19,6 +19,7 @@ from .io import load as mmcv_load, dump as mmcv_dump
 
 BASE_KEY = '_base_'
 DELETE_KEY = '_delete_'
+CUSTOM_IMPORT_KEY = '_custom_imports_'
 RESERVED_KEYS = ['filename', 'text', 'pretty_text']
 
 
@@ -284,8 +285,10 @@ class Config:
                  import_custom_modules=True):
         cfg_dict, cfg_text = Config._file2dict(filename,
                                                use_predefined_variables)
-        if import_custom_modules and cfg_dict.get('custom_imports', None):
-            import_modules_from_strings(**cfg_dict['custom_imports'])
+        if import_custom_modules and cfg_dict.get(CUSTOM_IMPORT_KEY, None):
+            if not isinstance(cfg_dict[CUSTOM_IMPORT_KEY], list):
+                raise ValueError('_custom_imports_ must be a list of import paths.')
+            import_modules_from_strings(cfg_dict.pop(CUSTOM_IMPORT_KEY))
         return Config(cfg_dict, cfg_text=cfg_text, filename=filename)
 
     @staticmethod

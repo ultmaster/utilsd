@@ -9,6 +9,7 @@ import dataclasses
 import inspect
 import json
 import os
+import warnings
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
@@ -378,7 +379,11 @@ class PythonConfig:
             for k in kwargs:
                 # silently overwrite the arguments with given ones.
                 result[k] = kwargs[k]
-            return self.type()(**result)
+            try:
+                return self.type()(**result)
+            except:
+                warnings.warn(f'Error when constructing {self.type()} with {result}.', RuntimeWarning)
+                raise
 
         return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False,
                                           namespace={'type': type_fn, 'build': build_fn})
