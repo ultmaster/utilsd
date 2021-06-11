@@ -1,6 +1,5 @@
 import abc
 import copy
-import itertools
 import random
 from typing import Any
 
@@ -36,8 +35,26 @@ class Choice(Space):
         return len(self.choices)
 
 
+class Evaluation(Space):
+    def __init__(self, eval_fn):
+        self.eval_fn = eval_fn
+
+    def __repr__(self):
+        return f'Evaluation({self.eval_fn})'
+
+    def sample(self):
+        return self
+
+    def __iter__(self):
+        return iter([self])
+
+    def __len__(self):
+        return 1
+
+
 def size(space: Any):
     sz = 1
+
     def _measure(space: Any):
         nonlocal sz
         if isinstance(space, Space):
@@ -53,6 +70,7 @@ def size(space: Any):
 
 def sample_from(space: Any):
     meta = {}
+
     def _sample(key: str, space: Any):
         if isinstance(space, Space):
             sample = space.sample()
@@ -66,13 +84,23 @@ def sample_from(space: Any):
             return {k: _sample(_joinkey(key, k), v) for k, v in space.items()}
         return space
 
+    def _evaluation_hook(obj, path):
+        if isinstance(obj, Evaluation):
+            value = obj.eval_fn(sample)
+            meta[path] = value
+            print(obj, value)
+            return value
+        return obj
+
     sample = _sample('', space)
+    sample = _recursive_iteration(sample, '', _evaluation_hook)
     sample['_meta'] = meta
     return sample
 
 
 def iterate_over(space: Any):
     meta = {}
+
     def _iterate(key: str, space: Any):
         if isinstance(space, Space):
             for sample in space:
@@ -100,10 +128,33 @@ def iterate_over(space: Any):
                 for t in _product(*iterate_params[1:]):
                     yield (s,) + t
 
+    def _evaluation_hook(obj, path):
+        if isinstance(obj, Evaluation):
+            value = obj.eval_fn(sample)
+            meta[path] = value
+            return value
+        return obj
+
     for sample in _iterate('', space):
+        sample = _recursive_iteration(sample, '', _evaluation_hook)
         sample['_meta'] = copy.deepcopy(meta)
         yield sample
 
 
 def _joinkey(a, b):
     return f'{a}.{b}' if str(a) else str(b)
+
+
+def _recursive_iteration(obj, path, hook):
+    obj = hook(obj, path)
+    if isinstance(obj, (tuple, list)):
+        new_obj = [_recursive_iteration(o, _joinkey(path, i), hook) for i, o in enumerate(obj)]
+        if isinstance(obj, tuple):
+            new_obj = tuple(new_obj)
+        if new_obj != obj:
+            obj = new_obj
+    elif isinstance(obj, dict):
+        new_obj = {k: _recursive_iteration(v, _joinkey(path, k), hook) for k, v in obj.items()}
+        if new_obj != obj:
+            obj = new_obj
+    return obj
