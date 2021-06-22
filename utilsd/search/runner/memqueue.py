@@ -1,12 +1,14 @@
+import json
 import os
 import threading
 from pathlib import Path
 
-from .base import BaseRunner
+from .base import BaseRunner, RUNNERS, Trial
 
 _lock = threading.Lock()
 
 
+@RUNNERS.register_module('memqueue')
 class MemQueueRunner(BaseRunner):
 
     def __init__(self, exp_dir: Path):
@@ -23,6 +25,19 @@ class MemQueueRunner(BaseRunner):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('1.1.1.1', 1))
         return s.getsockname()[0]
+
+    def submit_trials(self, *trials: Trial):
+        try:
+            _lock.acquire()
+            for trial in trials:
+                task = {'id': trial.sequence_id, 'command': trial.command}
+                self._redis_server.rpush('tasks', json.dumps(task))
+        finally:
+            _lock.release()
+
+    def wait_trials(*trials: Trial):
+        # print trial summary
+
 
     def submit_new_trial(self, command, parameters, setup=None):
         try:

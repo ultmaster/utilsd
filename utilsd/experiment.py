@@ -125,7 +125,12 @@ def get_runtime_config():
 
 
 def get_output_dir() -> Path:
-    return get_runtime_config().output_dir
+    try:
+        return get_runtime_config().output_dir
+    except AssertionError:
+        if 'PT_OUTPUT_DIR' in os.environ:
+            return Path(os.environ['PT_OUTPUT_DIR'])
+        raise
 
 
 def get_checkpoint_dir() -> Path:
