@@ -31,6 +31,10 @@ class RegistryConfig(Generic[T]):
     pass
 
 
+class SubclassConfig(Generic[T]):
+    pass
+
+
 __all__ = ['PythonConfig', 'ClassConfig', 'RegistryConfig']
 
 
@@ -58,10 +62,28 @@ def _is_tuple(type_hint):
     return str(type_hint).startswith('Tuple')
 
 
+def _find_class(cls_name: str, base_class: Type) -> Type:
+    for subclass in base_class.__subclasses__():
+        if subclass.__name__ == cls_name:
+            return subclass
+        if hasattr(subclass, 'alias') and subclass.alias == cls_name:
+            return subclass
+    if '.' in cls_name:
+        path, identifier = cls_name.rsplit('.', 1)
+        module = __import__(path, globals(), locals(), [identifier])
+        if hasattr(module, identifier):
+            subclass = getattr(module, identifier)
+            assert issubclass(subclass, base_class), f'{subclass} is not a subclass of {base_class}.'
+            return subclass
+    raise ValueError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
+
+
 def _is_type(value, type_hint) -> bool:
     # used in validation, to check whether value is of `type_hint`
     type_name = _strip_import_path(str(type_hint))
-    if type_name.startswith('RegistryConfig[') or type_name.startswith('ClassConfig['):
+    if type_name.startswith('RegistryConfig[') or \
+            type_name.startswith('ClassConfig[') or \
+            type_name.startswith('SubclassConfig['):
         return dataclasses.is_dataclass(value)
     if type_name == 'Any':
         return True
@@ -132,6 +154,10 @@ def _construct_with_type(value, type_hint) -> Any:
             value.pop('type')
         if type_name.startswith('ClassConfig['):
             cls = PythonConfig.from_type(cls.__args__[0])
+        if type_name.startswith('SubclassConfig['):
+            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+            cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
+            value.pop('type')
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
         elif not type_name.startswith('Dict['):
@@ -265,7 +291,7 @@ class PythonConfig:
         return cls(**config)
 
     @classmethod
-    def fromcli(cls, shortcuts=None, allow_rest=False, receive_nni=False):
+    def fromcli(cls, shortcuts=None, allow_rest=False, receive_nni=False, respect_config=True):
         """
         Parse command line from a mandatory config file and optional arguments, like
 
@@ -280,7 +306,7 @@ class PythonConfig:
             shortcuts = {}
 
         # gather overriding params from command line
-        cls._build_command_line_parser(parser, shortcuts)
+        cls._build_command_line_parser(parser, shortcuts, default_config if respect_config else {})
         parser.add_argument(
             '-h', '--help', action='help', default=SUPPRESS,
             help='Show this help message and exit')
@@ -305,7 +331,7 @@ class PythonConfig:
             return configs, rest
 
     @classmethod
-    def _build_command_line_parser(cls, parser, shortcuts, prefix=''):
+    def _build_command_line_parser(cls, parser, shortcuts, default_config, prefix=''):
         def str2bool(v):
             if isinstance(v, bool):
                 return v
@@ -337,7 +363,24 @@ class PythonConfig:
             field_type = _strip_optional(field.type)
             if is_dataclass(field_type):
                 assert issubclass(field_type, PythonConfig), f'Interface class {field_type} must be a subclass of `PythonConfig`.'
-                names += field_type._build_command_line_parser(parser, shortcuts, prefix=prefix + field.name + '.')
+                names += field_type._build_command_line_parser(parser, shortcuts, default_config.get(field.name, {}),
+                                                               prefix=prefix + field.name + '.')
+            elif any(_strip_import_path(str(field_type)).startswith(config_type + '[')
+                     for config_type in ['ClassConfig', 'RegistryConfig', 'SubclassConfig']):
+                if field.name in default_config:
+                    assert isinstance(default_config[field.name], dict), f'Expected {default_config[field.name]} to be a dict.'
+                    for key, value in default_config[field.name].items():
+                        name = prefix + field.name + '.' + key
+                        # TODO: duplicated logic, needs to be refactored
+                        names.append(name)
+                        shortcut = shortcuts.get(name, [])
+                        inferred_type = infer_type(type(value))
+                        if inferred_type == str2bool:
+                            parser.add_argument('--' + name, type=inferred_type, default=SUPPRESS)
+                            if shortcut:
+                                parser.add_argument(*shortcut, action='store_true', dest=name)
+                        else:
+                            parser.add_argument('--' + name, *shortcut, type=inferred_type, default=SUPPRESS)
             else:
                 name = prefix + field.name
                 names.append(name)
@@ -374,6 +417,7 @@ class PythonConfig:
                 fields.append((param.name, param.annotation))
 
         def type_fn(self): return t
+
         def build_fn(self, **kwargs):
             result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
             for k in kwargs:
