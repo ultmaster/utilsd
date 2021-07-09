@@ -27,6 +27,8 @@ class Trial:
     status: Literal['pass', 'failed', 'running', 'queued'] = 'queued'
     output_dir: Optional[Path] = None
     metrics: List[MetricData] = []
+    job_tracking_info: Any = None
+    retry_count: int = 0
 
     def completed(self):
         return self.status in ['pass', ' failed']
