@@ -41,5 +41,10 @@ setuptools.setup(
     extras_require={
         'full': ['torch>=1.7.1'],
         'docs': ['sphinx'],
+    },
+    entry_points={
+        'console_scripts': [
+            'uazcli = utilsd.az.cli:main',
+        ]
     }
 )
