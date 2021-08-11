@@ -1,0 +1,5 @@
+n:
+  type: SubFoo
+t:
+  type: tests.assets.import_invisible.SubBar
+  a: 1

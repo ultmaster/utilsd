@@ -1,9 +1,11 @@
 import os
+from multiprocessing import Pool, Value
 from typing import Dict, Union
 
 import pytest
-from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, ValidationError, configclass
+from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, SubclassConfig, ValidationError, configclass
 from unittest.mock import patch
+from tests.assets.import_class import BaseBar
 
 
 class Converters(metaclass=Registry, name='converter'):
@@ -22,6 +24,14 @@ class Converter2:
     def __init__(self, a: int, b: int):
         self.a = a
         self.b = b
+
+
+class BaseFoo:
+    pass
+
+
+class SubFoo(BaseFoo):
+    pass
 
 
 @configclass
@@ -75,6 +85,12 @@ class FooN(PythonConfig):
     n: ClassConfig[Converter1]
 
 
+@configclass
+class CfgWithSubclass(PythonConfig):
+    n: SubclassConfig[BaseFoo]
+    t: SubclassConfig[BaseBar]
+
+
 def test_python_config():
     assert Foo(a=1, b=2.0, c={'n': 0}).c.n == 0
 
@@ -115,6 +131,16 @@ def test_class_config():
         FooN(n={'a': 'aaa', 'b': 2})
 
 
+def test_subclass_config():
+    config = CfgWithSubclass(
+        n={'type': 'SubFoo'},
+        t={'type': 'tests.assets.import_invisible.SubBar', 'a': 1}
+    )
+    assert isinstance(config.t.build(), BaseBar)
+    assert isinstance(config.n.build(), SubFoo)
+    assert config.t.build().a == 1
+
+
 def test_registry():
     assert len(Converters) == 2
     assert 'Converter1' in Converters
@@ -129,6 +155,14 @@ def test_parse_command_line():
         assert Foo.fromcli().b == 3
     with patch('argparse._sys.argv', ['test.py', config_fp, '--c.n', '1']):
         assert Foo.fromcli().c.n == 1
+
+
+def test_parse_command_line_dynamic():
+    config_fp = os.path.join(os.path.dirname(__file__), 'assets/exp_config_subclass.yml')
+    with patch('argparse._sys.argv', ['test.py', config_fp]):
+        assert CfgWithSubclass.fromcli().t.build().a == 1
+    with patch('argparse._sys.argv', ['test.py', config_fp, '--t.a', '2']):
+        assert CfgWithSubclass.fromcli().t.build().a == 2
 
 
 if __name__ == '__main__':

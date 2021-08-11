@@ -25,7 +25,7 @@ setuptools.setup(
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
     url='https://github.com/ultmaster/utilsd',
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(include=['utilsd*']),
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
@@ -41,5 +41,10 @@ setuptools.setup(
     extras_require={
         'full': ['torch>=1.7.1'],
         'docs': ['sphinx'],
+    },
+    entry_points={
+        'console_scripts': [
+            'uazcli = utilsd.az.cli:main',
+        ]
     }
 )
