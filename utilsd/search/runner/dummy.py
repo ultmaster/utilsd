@@ -31,5 +31,6 @@ class DummyRunner(BaseRunner):
             if trial.completed():
                 warnings.warn(f'Trial is not completed. Will not be resumed: {trial}')
 
-    @classmethod
-    def run_trial(cls):
+    @staticmethod
+    def run_trial():
+        pass

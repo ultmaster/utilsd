@@ -1,4 +1,7 @@
-from utilsd.search import Choice, Evaluation, sample_from, iterate_over, size
+from pathlib import Path
+
+from utilsd.search import Choice, Evaluation, sample_from, iterate_over, size, run_commands
+from utilsd.search.runner import MemQueueRunner
 
 
 def test_sample():
@@ -38,3 +41,19 @@ def test_sample_with_evaluation():
 
     for sample in iterate_over(space):
         assert sample['sensors']['eval_a'] == sample['sensors']['position'] + 1
+
+
+def test_submit_via_memqueue():
+    trials = {
+        'abc': 'echo 1',
+        'cde': 'cat /etc/profile',
+        'ggg': 'python -c "import time; print(time.time())"',
+        'env': 'python -c "import os; print(os.environ[\'PT_OUTPUT_DIR\'])"',
+    }
+    exp_dir = Path('.cache')
+    exp_dir.mkdir(exist_ok=True, parents=True)
+    run_commands(trials, MemQueueRunner(exp_dir, '127.0.0.1', '6379'))
+
+
+if __name__ == '__main__':
+    test_submit_via_memqueue()

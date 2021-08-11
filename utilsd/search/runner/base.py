@@ -1,5 +1,6 @@
 import abc
-from dataclasses import dataclass
+import click
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -7,6 +8,11 @@ from utilsd.config import Registry
 
 
 OUTPUT_DIR_ENV_KEY = 'PT_OUTPUT_DIR'
+
+
+@click.group()
+def runner_cli():
+    pass
 
 
 class RUNNERS(metaclass=Registry, name='runners'):
@@ -26,7 +32,7 @@ class Trial:
     command: str
     status: Literal['pass', 'failed', 'running', 'queued'] = 'queued'
     output_dir: Optional[Path] = None
-    metrics: List[MetricData] = []
+    metrics: List[MetricData] = field(default_factory=list)
     job_tracking_info: Any = None
     retry_count: int = 0
 
@@ -34,8 +40,7 @@ class Trial:
         return self.status in ['pass', ' failed']
 
 
-@abc.ABC
-class BaseRunner:
+class BaseRunner(abc.ABC):
     def __init__(self, exp_dir: Path):
         self.exp_dir = exp_dir
         assert self.exp_dir.exists(), f'Experiment dir {self.exp_dir} does not exist.'
@@ -49,7 +54,7 @@ class BaseRunner:
     def wait_trials(*trials: Trial):
         pass
 
-    @abc.abstractclassmethod
+    @abc.abstractstaticmethod
     def run_trial(cls):
         pass
 

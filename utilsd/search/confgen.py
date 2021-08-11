@@ -1,5 +1,5 @@
 import random
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from .space import sample_from, iterate_over, size
 from ..fileio import dump
@@ -10,7 +10,7 @@ def shuffle_(lst):
     return lst
 
 
-def offline_search(space: Any, budget: int, method: str = 'random', out_file: Optional[Any] = None):
+def offline_search(space: Any, budget: int, method: Literal['random', 'grid'] = 'random', out_file: Optional[Any] = None):
     if method == 'random':
         if size(space) < 1e6:
             samples = shuffle_(list(iterate_over(space)))[:budget]

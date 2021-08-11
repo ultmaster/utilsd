@@ -1,11 +1,14 @@
+import click
 import json
 import os
+import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
 from utilsd.logging import print_log
-from .base import BaseRunner, RUNNERS, Trial
+from .base import BaseRunner, RUNNERS, Trial, OUTPUT_DIR_ENV_KEY, runner_cli
 from .utils import random_key
 
 _lock = threading.Lock()
@@ -16,7 +19,8 @@ class MemQueueRunner(BaseRunner):
     """
     MemQueue runner that is based on the synchronization of a redis server.
 
-    Workers should be launched via ``python -m utilsd.search.runner.memqueue /path/to/your/expdir --host <host> --port <port>``.
+    Workers should be launched via ``python -m utilsd.search.runner memqueue --host <host> --port <port>``
+    under your working directory.
     If you are in local code, host and port can be omitted, which will be localhost:6379 by default.
     """
 
@@ -46,105 +50,89 @@ class MemQueueRunner(BaseRunner):
             _lock.release()
 
     def wait_trials(self, *trials: Trial):
-        for trial in trials:
-            redis_cache_key_name = 'utilsd_status_' + trial.job_tracking_info['job_id']
-            status = self._redis_server.get(redis_cache_key_name)
-            if status is not None:
-                status = json.loads(status.decode())
-                trial.job_tracking_info.update(status)
-                if status['pid'] is None:
-                    trial.status = 'queued'
-                else:
-                    trial.output_dir = status['output_dir']
-                    if status['exitcode'] is None:
-                        trial.status = 'running'
-                    elif status['exitcode'] == 0:
-                        trial.status == 'success'
+        try:
+            _lock.acquire()
+            for trial in trials:
+                job_id = trial.job_tracking_info['job_id']
+                redis_cache_key_name = 'utilsd_status_' + job_id
+                status = self._redis_server.get(redis_cache_key_name)
+                if trial.completed():
+                    continue
+                if status is not None:
+                    status = json.loads(status.decode())
+                    trial.job_tracking_info.update(status)
+                    if status['pid'] is None:
+                        trial.status = 'queued'
                     else:
-                        trial.status = 'failed'
-                self._redis_server.delete(redis_cache_key_name)
+                        if status.get('exitcode') is None:
+                            trial.status = 'running'
+                        elif status['exitcode'] == 0:
+                            trial.status = 'pass'
+                        else:
+                            trial.status = 'failed'
+                    # self._redis_server.delete(redis_cache_key_name)  # FIXME: this has problems
 
-            redis_cache_key_name = 'utilsd_metrics_' + trial.job_tracking_info['job_id']
-            metric = self._redis_server.lpop(redis_cache_key_name)
-            if metric is not None:
-                metric = json.loads(metric.decode())
-                self._logger.info(f'[Trial #{pid}] Collected metrics: {metric}')
-                if metric['type'] == 'final':
-                    self._metrics[pid] = metric['value']
-                    break
-            else:
-                break
+                redis_cache_key_name = 'utilsd_metrics_' + job_id
+                while True:
+                    metric = self._redis_server.lpop(redis_cache_key_name)
+                    if metric is not None:
+                        metric = json.loads(metric.decode())
+                        self._logger.info(f'[Trial #{job_id}] Collected metrics: {metric}')
+                        trial.metrics.append(metric)
+                    else:
+                        break
+        finally:
+            _lock.release()
 
     def _send_to_redis(self, trial: Trial):
-        try:
-            _lock.acquire()
-            job_id = random_key()
-            trial.output_dir = 
-            trial.job_tracking_info = {'job_id': job_id}
-            task = {
-                'id': job_id,
-                'command': trial.command
-            }
-            trial.status = 'queued'
-            self._redis_server.rpush('utilsd_tasks', json.dumps(task))
-        finally:
-            _lock.release()
+        job_id = random_key()
+        trial.job_tracking_info = {'job_id': job_id}
+        task = {
+            'id': job_id,
+            'command': trial.command,
+            'output_dir': trial.output_dir.as_posix(),
+        }
+        trial.status = 'queued'
+        self._redis_server.rpush('utilsd_tasks', json.dumps(task))
 
-    def submit_new_trial(self, command, parameters, setup=None):
-        try:
-            _lock.acquire()
-            parameter_id = self._parameter_id
-            self._parameter_id += 1
-            task = {
-                'prepare': setup,
-                'command': command,
-                'exp_id': self._experiment_id,
-                'trial_id': str(parameter_id),
-                'seq_id': parameter_id,
-                'parameters': parameters
-            }
-            self._logger.info(f'Generated new task with pid {parameter_id}: {task}')
-            self._redis_server.rpush('tasks', json.dumps(task))
-            self.history.append(task)
-            self._statuses[parameter_id] = TrialStatus.RUNNING
-            return parameter_id
-        finally:
-            _lock.release()
-
-    def _collect_new_metrics(self, pid):
+    @staticmethod
+    @runner_cli.command('memqueue')
+    @click.argument('host')
+    @click.argument('port')
+    def run_trial(host: str, port: int):
+        from redis import Redis
+        _redis_server = Redis(host, port)
         while True:
-            metric = self._redis_server.lpop(f'metrics_{self._experiment_id}_{pid}')
-            if metric is not None:
-                metric = json.loads(metric.decode())
-                self._logger.info(f'[Trial #{pid}] Collected metrics: {metric}')
-                if metric['type'] == 'final':
-                    self._metrics[pid] = metric['value']
-                    break
+            next_trial = _redis_server.lpop('utilsd_tasks')
+            if next_trial is not None:
+                next_trial = json.loads(next_trial.decode())
+                print_log(f'Receiving task: {next_trial}', __name__)
+                process = subprocess.Popen(
+                    next_trial['command'],
+                    env={**os.environ, OUTPUT_DIR_ENV_KEY: next_trial['output_dir']},
+                    shell=True
+                )
+                status = {'status': 'queued', 'pid': process.pid}
+                while True:
+                    if process.poll() is None:
+                        new_status = {
+                            'pid': process.pid
+                        }
+                    else:
+                        new_status = {
+                            'exitcode': process.returncode,
+                            'pid': process.pid
+                        }
+                    if new_status != status:
+                        _redis_server.set(
+                            'utilsd_status_' + next_trial['id'],
+                            json.dumps(new_status)
+                        )
+                        status = new_status
+
+                    if process.returncode is not None:
+                        break
+                    time.sleep(5)
+                # TODO: metrics
             else:
-                break
-
-    def _collect_new_statuses(self, pid):
-        status = self._redis_server.get(f'status_{self._experiment_id}_{pid}')
-        if status is not None:
-            status = json.loads(status.decode())
-            self._logger.info(f'[Trial #{pid}] Collected status: {status}')
-            self._statuses[pid] = TrialStatus.SUCCESS if status['exitcode'] == 0 else TrialStatus.FAILED
-
-    def query_metrics(self, pid):
-        try:
-            _lock.acquire()
-            self._collect_new_metrics(pid)
-            self._collect_new_statuses(pid)
-        finally:
-            _lock.release()
-        if self._statuses[pid] == TrialStatus.FAILED:
-            raise TrialFailed
-        elif self._statuses[pid] == TrialStatus.SUCCESS:
-            self._logger.warning(f'[Trial #{pid}] succeeded with no metrics.')
-            if pid not in self._metrics:
-                raise TrialFailed
-            return self._metrics[pid]
-        return None
-
-    def statistics(self):
-        return dict(collections.Counter(self._statuses.values()))
+                time.sleep(5)
