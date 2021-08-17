@@ -25,6 +25,9 @@ class DummyRunner(BaseRunner):
     def wait_trials(self, *trials: Trial):
         pass
 
+    def kill_trials(self, *trials: Trial):
+        warnings.warn(f'{self.__class__.__name__} cannot kill trials.')
+
     def resume(self, data):
         super().resume(data)
         for trial in self.trials:

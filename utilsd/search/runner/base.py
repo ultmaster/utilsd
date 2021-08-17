@@ -37,7 +37,7 @@ class Trial:
     retry_count: int = 0
 
     def completed(self):
-        return self.status in ['pass', ' failed']
+        return self.status in ['pass', 'failed']
 
 
 class BaseRunner(abc.ABC):
@@ -47,11 +47,15 @@ class BaseRunner(abc.ABC):
         self.trials: List[Trial] = []
 
     @abc.abstractmethod
-    def submit_trials(*trials: Trial):
+    def submit_trials(self, *trials: Trial):
         pass
 
     @abc.abstractmethod
-    def wait_trials(*trials: Trial):
+    def wait_trials(self, *trials: Trial):
+        pass
+
+    @abc.abstractmethod
+    def kill_trials(self, *trials: Trial):
         pass
 
     @abc.abstractstaticmethod
