@@ -132,7 +132,7 @@ class MemQueueRunner(BaseRunner):
                 kill_command = _redis_server.get(kill_trial_key)
                 if kill_command is not None:
                     _redis_server.delete(kill_trial_key)
-                    print_log(f'Task is already marked as killed. Continue.', __name__)
+                    print_log(f'Task {next_trial["id"]} is already marked as killed. Continue.', __name__)
                     continue
 
                 # https://stackoverflow.com/questions/4789837/how-to-terminate-a-python-subprocess-launched-with-shell-true
@@ -147,7 +147,7 @@ class MemQueueRunner(BaseRunner):
                 while True:
                     kill_command = _redis_server.get(kill_trial_key)
                     if kill_command is not None:
-                        print_log(f'Kill command received. Killing.', __name__)
+                        print_log(f'Kill command of {next_trial["id"]} received. Killing.', __name__)
                         _redis_server.delete(kill_trial_key)
                         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                         break
