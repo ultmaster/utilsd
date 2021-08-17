@@ -1,6 +1,7 @@
 import click
 import json
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -9,7 +10,7 @@ from typing import Optional
 
 from utilsd.logging import print_log
 from .base import BaseRunner, RUNNERS, Trial, OUTPUT_DIR_ENV_KEY, runner_cli
-from .utils import random_key, kill_pid
+from .utils import random_key
 
 _lock = threading.Lock()
 
@@ -134,10 +135,12 @@ class MemQueueRunner(BaseRunner):
                     print_log(f'Task is already marked as killed. Continue.', __name__)
                     continue
 
+                # https://stackoverflow.com/questions/4789837/how-to-terminate-a-python-subprocess-launched-with-shell-true
                 process = subprocess.Popen(
                     next_trial['command'],
                     env={**os.environ, OUTPUT_DIR_ENV_KEY: next_trial['output_dir']},
-                    shell=True
+                    shell=True,
+                    preexec_fn=os.setsid
                 )
                 status = {'status': 'queued', 'pid': process.pid}
 
@@ -146,7 +149,8 @@ class MemQueueRunner(BaseRunner):
                     if kill_command is not None:
                         print_log(f'Kill command received. Killing.', __name__)
                         _redis_server.delete(kill_trial_key)
-                        kill_pid(process.pid)
+                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                        break
 
                     if process.poll() is None:
                         new_status = {
