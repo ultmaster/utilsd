@@ -27,3 +27,5 @@ def run_commands(trials: Dict[str, str], runner: BaseRunner, out_file: Optional[
     except KeyboardInterrupt:
         print_log('Interrupted. kill left trials...')
         runner.kill_trials(*expanded_trials)
+        if out_file is not None:
+            pd.DataFrame.from_records([dataclasses.asdict(trial) for trial in expanded_trials]).to_csv(out_file)

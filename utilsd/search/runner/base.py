@@ -30,14 +30,14 @@ class MetricData:
 class Trial:
     sequence_id: int
     command: str
-    status: Literal['pass', 'failed', 'running', 'queued'] = 'queued'
+    status: Literal['pass', 'failed', 'killed', 'running', 'queued'] = 'queued'
     output_dir: Optional[Path] = None
     metrics: List[MetricData] = field(default_factory=list)
     job_tracking_info: Any = None
     retry_count: int = 0
 
     def completed(self):
-        return self.status in ['pass', 'failed']
+        return self.status in ['pass', 'failed', 'killed']
 
 
 class BaseRunner(abc.ABC):

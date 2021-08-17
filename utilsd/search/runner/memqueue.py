@@ -9,7 +9,7 @@ from typing import Optional
 
 from utilsd.logging import print_log
 from .base import BaseRunner, RUNNERS, Trial, OUTPUT_DIR_ENV_KEY, runner_cli
-from .utils import random_key
+from .utils import random_key, kill_pid
 
 _lock = threading.Lock()
 
@@ -99,6 +99,7 @@ class MemQueueRunner(BaseRunner):
                     continue
                 print_log(f'[Trial #{trial.sequence_id}] Killing.')
                 self._redis_server.set('utilsd_kill_' + trial.job_tracking_info['job_id'], 1)
+                trial.status = 'killed'
         finally:
             _lock.release()
 
@@ -145,7 +146,7 @@ class MemQueueRunner(BaseRunner):
                     if kill_command is not None:
                         print_log(f'Kill command received. Killing.', __name__)
                         _redis_server.delete(kill_trial_key)
-                        process.kill()
+                        kill_pid(process.pid)
 
                     if process.poll() is None:
                         new_status = {

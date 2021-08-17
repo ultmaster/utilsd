@@ -41,6 +41,7 @@ setuptools.setup(
     extras_require={
         'full': ['torch>=1.7.1'],
         'docs': ['sphinx'],
+        'runner': ['psutil>=5.8.0']
     },
     entry_points={
         'console_scripts': [
