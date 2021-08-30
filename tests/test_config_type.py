@@ -32,3 +32,4 @@ def test_union():
     assert _test_type(Union[pathlib.Path, Foo], '/bin').as_posix() == '/bin'
     assert _test_type(Union[pathlib.Path, Foo], {'bar': 2}).bar == 2
     assert _test_type(Union[str, typing.Tuple[str, str]], ['1', '2']) == ('1', '2')
+    assert _test_type(Union[pathlib.Path, None], None) == None

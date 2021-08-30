@@ -87,10 +87,10 @@ def _is_type(value, type_hint) -> bool:
         return dataclasses.is_dataclass(value)
     if type_name == 'Any':
         return True
-    if _is_path_like(type_hint):
-        return _is_path_like(type(value)) or isinstance(value, str)
     if type_name.startswith('Union['):
         return any([_is_type(value, arg) for arg in type_hint.__args__])
+    if _is_path_like(type_hint):
+        return _is_path_like(type(value)) or isinstance(value, str)
     if value is None:
         return type_name.startswith('Optional[') or type_hint == type(None)
     if type_name.startswith('List['):
