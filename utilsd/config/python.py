@@ -13,7 +13,7 @@ import warnings
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PosixPath
 from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic
 
 from ..fileio.config import Config
@@ -55,7 +55,7 @@ def _strip_import_path(type_name):
 
 
 def _is_path_like(type_hint):
-    return _strip_optional(type_hint) == Path or _strip_optional(type_hint) == os.PathLike
+    return _strip_optional(type_hint) in (Path, PosixPath, os.PathLike)
 
 
 def _is_tuple(type_hint):
@@ -87,6 +87,8 @@ def _is_type(value, type_hint) -> bool:
         return dataclasses.is_dataclass(value)
     if type_name == 'Any':
         return True
+    if _is_path_like(type_hint):
+        return _is_path_like(type(value)) or isinstance(value, str)
     if type_name.startswith('Union['):
         return any([_is_type(value, arg) for arg in type_hint.__args__])
     if value is None:
@@ -96,7 +98,7 @@ def _is_type(value, type_hint) -> bool:
             return False
         return all([_is_type(v, type_hint.__args__[0]) for v in value])
     if type_name.startswith('Tuple['):
-        if not isinstance(value, tuple):
+        if not isinstance(value, tuple) and not isinstance(value, list):
             return False
         return all([_is_type(v, arg) for v, arg in zip(value, type_hint.__args__)])
     if type_name.startswith('Dict['):
@@ -139,6 +141,8 @@ def _construct_with_type(value, type_hint) -> Any:
         value = float(value)
     if cls == int:
         value = int(value)
+    if cls == str:
+        assert isinstance(value, (int, float, str))
 
     # convert to enum if needed
     if isinstance(cls, type) and issubclass(cls, Enum):

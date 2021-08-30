@@ -16,14 +16,19 @@ def test_path():
     assert _is_path_like(typing.Optional[pathlib.Path])
 
 
+def _test_type(T, value):
+    @configclass
+    class Main(PythonConfig):
+        var: T
+
+    return Main(var=value).var
+
+
 def test_union():
     @configclass
     class Foo(PythonConfig):
         bar: int = 1
 
-    @configclass
-    class Main(PythonConfig):
-        foo: Union[pathlib.Path, Foo]
-
-    assert Main(**{'foo': '/bin'}).foo.as_posix() == '/bin'
-    assert Main(**{'foo': {'bar': 2}}).foo.bar == 2
+    assert _test_type(Union[pathlib.Path, Foo], '/bin').as_posix() == '/bin'
+    assert _test_type(Union[pathlib.Path, Foo], {'bar': 2}).bar == 2
+    assert _test_type(Union[str, typing.Tuple[str, str]], ['1', '2']) == ('1', '2')

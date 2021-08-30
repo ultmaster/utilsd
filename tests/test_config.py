@@ -61,7 +61,6 @@ class InitWithComplexType:
         if isinstance(converter, Converter1):
             self.converter = converter
         else:
-            print(converter)
             self.converter = converter.build()
 
 
