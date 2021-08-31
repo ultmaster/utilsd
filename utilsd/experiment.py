@@ -90,7 +90,7 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False,
     return runtime_config
 
 
-def print_config(config, dump_config=True, output_dir=None):
+def print_config(config, dump_config=True, output_dir=None, expand_config=True):
     class Encoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, Enum):
@@ -110,7 +110,8 @@ def print_config(config, dump_config=True, output_dir=None):
     print_log('Config: ' + json.dumps(config, cls=Encoder), __name__)
     if config_meta is not None:
         print_log('Config (meta): ' + json.dumps(config_meta, cls=Encoder), __name__)
-    print_log('Config (expanded):\n' + pprint.pformat(config), __name__)
+    if expand_config:
+        print_log('Config (expanded):\n' + pprint.pformat(config), __name__)
     if dump_config:
         with open(os.path.join(output_dir, 'config.json'), 'w') as fh:
             json.dump(config, fh, cls=Encoder)
