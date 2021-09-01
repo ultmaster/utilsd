@@ -14,7 +14,7 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic
+from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar
 
 from ..fileio.config import Config
 from .exception import ValidationError
@@ -406,7 +406,9 @@ class PythonConfig:
     def from_type(cls, t: Type):
         class_name = t.__name__ + 'Config'
         init_signature = inspect.signature(t.__init__)
-        fields = []
+        fields = [
+            ('_type', ClassVar[Type], t),
+        ]
         for param in init_signature.parameters.values():
             if param.name == 'self':
                 continue
@@ -420,7 +422,7 @@ class PythonConfig:
             else:
                 fields.append((param.name, param.annotation))
 
-        def type_fn(self): return t
+        def type_fn(self): return self._type
 
         def build_fn(self, **kwargs):
             result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
@@ -428,9 +430,9 @@ class PythonConfig:
                 # silently overwrite the arguments with given ones.
                 result[k] = kwargs[k]
             try:
-                return self.type()(**result)
+                return self._type(**result)
             except:
-                warnings.warn(f'Error when constructing {self.type()} with {result}.', RuntimeWarning)
+                warnings.warn(f'Error when constructing {self._type} with {result}.', RuntimeWarning)
                 raise
 
         return dataclasses.make_dataclass(class_name, fields, bases=(cls,), init=False,
