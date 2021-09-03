@@ -14,7 +14,7 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar
+from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar, Iterator
 
 from ..fileio.config import Config
 from .exception import ValidationError
@@ -62,8 +62,14 @@ def _is_tuple(type_hint):
     return str(type_hint).startswith('Tuple')
 
 
-def _find_class(cls_name: str, base_class: Type) -> Type:
+def _iterate_subclass(base_class: Type) -> Iterator[Type]:
     for subclass in base_class.__subclasses__():
+        yield subclass
+        yield from _iterate_subclass(subclass)
+
+
+def _find_class(cls_name: str, base_class: Type) -> Type:
+    for subclass in _iterate_subclass(base_class):
         if subclass.__name__ == cls_name:
             return subclass
         if hasattr(subclass, 'alias') and subclass.alias == cls_name:
