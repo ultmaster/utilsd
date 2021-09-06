@@ -2,7 +2,7 @@ import abc
 import copy
 import itertools
 import random
-from typing import Any
+from typing import Any, List, Optional
 
 
 class Space(abc.ABC):
@@ -12,8 +12,9 @@ class Space(abc.ABC):
 
 
 class Choice(Space):
-    def __init__(self, choices):
+    def __init__(self, choices: List[Any], prior: Optional[List[float]] = None):
         self.choices = choices
+        self.prior = prior
 
     def __repr__(self):
         return f'Choices({self.choices})'
@@ -24,7 +25,10 @@ class Choice(Space):
         if len(excludes) >= len(self.choices):
             raise ValueError(f'Too many excludes: {excludes}')
         for _ in range(retry):
-            picked = random.choice(self.choices)
+            if self.prior is not None:
+                picked = random.choices(self.choices, self.prior, k=1)[0]
+            else:
+                picked = random.choice(self.choices)
             if picked not in excludes:
                 return picked
         raise ValueError(f'Too many retries to pick from {self.choices} that excludes {excludes}')
