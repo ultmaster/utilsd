@@ -3,8 +3,6 @@
 import sys
 import logging
 
-import torch.distributed as dist
-
 logger_initialized = {}
 
 
@@ -53,10 +51,13 @@ def setup_logger(name, log_file=None, log_level=logging.INFO, file_mode='w'):
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     handlers = [stream_handler]
 
-    if dist.is_available() and dist.is_initialized():
-        rank = dist.get_rank()
-    else:
-        rank = 0
+    rank = 0
+    try:
+        import torch.distributed as dist
+        if dist.is_available() and dist.is_initialized():
+            rank = dist.get_rank()
+    except ImportError:
+        pass
 
     # only rank 0 will add a FileHandler
     if rank == 0 and log_file is not None:

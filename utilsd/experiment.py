@@ -4,12 +4,16 @@ import logging
 import os
 import pprint
 import random
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List
 
 import numpy as np
-import torch
+try:
+    import torch
+except ImportError:
+    warnings.warn('PyTorch is not installed. Some features of utilsd might not work.')
 from .config.builtin import RuntimeConfig
 from .logging import mute_logger, print_log, setup_logger, reset_logger
 

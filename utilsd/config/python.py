@@ -84,6 +84,24 @@ def _find_class(cls_name: str, base_class: Type) -> Type:
     raise ValueError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
 
 
+def _recognize_class_from_class_config(cls, value, pop=True):
+    type_name = _strip_import_path(str(cls))
+    if type_name.startswith('RegistryConfig['):
+        registry = cls.__args__[0]
+        assert isinstance(registry, Registry), 'Type in RegisterConfig should be a registry.'
+        assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+        assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
+        cls = PythonConfig.from_type(registry.get(value['type']))
+    elif type_name.startswith('ClassConfig['):
+        cls = PythonConfig.from_type(cls.__args__[0])
+    elif type_name.startswith('SubclassConfig['):
+        assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+        cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
+    if pop:
+        value.pop('type', None)
+    return cls
+
+
 def _is_type(value, type_hint) -> bool:
     # used in validation, to check whether value is of `type_hint`
     type_name = _strip_import_path(str(type_hint))
@@ -155,19 +173,7 @@ def _construct_with_type(value, type_hint) -> Any:
         value = cls(value)
     # convert nested dict to config type
     if isinstance(value, dict):
-        if type_name.startswith('RegistryConfig['):
-            registry = cls.__args__[0]
-            assert isinstance(registry, Registry), 'Type in RegisterConfig should be a registry.'
-            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
-            assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
-            cls = PythonConfig.from_type(registry.get(value['type']))
-            value.pop('type')
-        if type_name.startswith('ClassConfig['):
-            cls = PythonConfig.from_type(cls.__args__[0])
-        if type_name.startswith('SubclassConfig['):
-            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
-            cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
-            value.pop('type')
+        cls = _recognize_class_from_class_config(cls, value)
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
         elif not type_name.startswith('Dict['):
@@ -371,13 +377,18 @@ class PythonConfig:
         names = []
         for field in fields(cls):
             field_type = _strip_optional(field.type)
+            field_type_name = _strip_import_path(str(field_type))
             if is_dataclass(field_type):
                 assert issubclass(field_type, PythonConfig), f'Interface class {field_type} must be a subclass of `PythonConfig`.'
                 names += field_type._build_command_line_parser(parser, shortcuts, default_config.get(field.name, {}),
                                                                prefix=prefix + field.name + '.')
-            elif any(_strip_import_path(str(field_type)).startswith(config_type + '[')
+            elif any(field_type_name.startswith(config_type + '[')
                      for config_type in ['ClassConfig', 'RegistryConfig', 'SubclassConfig']):
-                if field.name in default_config:
+                field_type_guess = _recognize_class_from_class_config(field.type, default_config.get(field.name, {}), pop=False)
+                if is_dataclass(field_type_guess):
+                    names += field_type_guess._build_command_line_parser(parser, shortcuts, default_config.get(field.name, {}),
+                                                                         prefix=prefix + field.name + '.')
+                elif field.name in default_config:
                     assert isinstance(default_config[field.name], dict), f'Expected {default_config[field.name]} to be a dict.'
                     for key, value in default_config[field.name].items():
                         name = prefix + field.name + '.' + key

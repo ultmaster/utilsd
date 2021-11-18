@@ -34,6 +34,7 @@ setuptools.setup(
     python_requires='>=3.7',
     install_requires=[
         'addict>=2.4.0',
+        'click>=8.0',
         'numpy>=1.18.0',
         'pyyaml>=5.4.1',
         'yapf>=0.31.0',
