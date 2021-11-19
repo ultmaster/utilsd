@@ -14,7 +14,7 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar, Iterator
+from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar, Iterator, Optional, List
 
 from ..fileio.config import Config
 from .exception import ValidationError
@@ -307,11 +307,31 @@ class PythonConfig:
         return cls(**config)
 
     @classmethod
-    def fromcli(cls, shortcuts=None, allow_rest=False, receive_nni=False, respect_config=True):
-        """
-        Parse command line from a mandatory config file and optional arguments, like
+    def fromcli(cls, *,
+                shortcuts: Optional[Dict[str, str]] = None,
+                allow_rest: bool = False,
+                receive_nni: bool = False,
+                respect_config: bool = True) -> Union['PythonConfig', Tuple['PythonConfig', List[str]]]:
+        """Parse command line from a mandatory config file and optional arguments, like
 
             python main.py exp.yaml --learning_rate 1e-4
+
+        Args:
+            shortcuts (Optional[Dict[str, str]], optional): To create short command line arguments.
+                In the form of ``{'-lr': 'trainer.learning_rate'}``. Defaults to None.
+            allow_rest (bool, optional): If false, check if there is any unrecognized
+                command line arguments. If false, ignore them. Defaults to False.
+            receive_nni (bool, optional): Receive next parameters from NNI. Defaults to False.
+            respect_config (bool, optional): Will try to read the config file first and get information
+                like types to build a more comprehensive command line parser. Defaults to True.
+
+        Raises:
+            ValidationError: Config file is invalid.
+
+        Returns:
+            Union[PythonConfig, Tuple[PythonConfig, List[str]]]:
+                If ``allow_rest``, a tuple of parsed config and the rest of command line arguments will be returned.
+                Otherwise, the parse config only.
         """
         parser = ArgumentParser(add_help=False)
         parser.add_argument('exp', help='Experiment YAML file')

@@ -5,7 +5,6 @@ Currently it's same as https://kaiyangzhou.github.io/deep-person-reid/_modules/t
 from collections import defaultdict
 from collections.abc import Sequence
 import numpy as np
-import torch
 
 __all__ = ['AverageMeter', 'MetricMeter']
 
