@@ -37,6 +37,7 @@ setuptools.setup(
         'numpy>=1.18.0',
         'pyyaml>=5.4.1',
         'yapf>=0.31.0',
+        'numpy<1.22;python_version<"3.8"',
     ],
     extras_require={
         'full': ['torch>=1.7.1'],
