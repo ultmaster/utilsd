@@ -14,7 +14,7 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar, Iterator
+from typing import Any, Dict, TypeVar, Tuple, Union, Type, Generic, ClassVar, Iterator, Optional, List
 
 from ..fileio.config import Config
 from .exception import ValidationError
@@ -82,6 +82,24 @@ def _find_class(cls_name: str, base_class: Type) -> Type:
             assert issubclass(subclass, base_class), f'{subclass} is not a subclass of {base_class}.'
             return subclass
     raise ValueError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
+
+
+def _recognize_class_from_class_config(cls, value, pop=True):
+    type_name = _strip_import_path(str(cls))
+    if type_name.startswith('RegistryConfig['):
+        registry = cls.__args__[0]
+        assert isinstance(registry, Registry), 'Type in RegisterConfig should be a registry.'
+        assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+        assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
+        cls = PythonConfig.from_type(registry.get(value['type']))
+    elif type_name.startswith('ClassConfig['):
+        cls = PythonConfig.from_type(cls.__args__[0])
+    elif type_name.startswith('SubclassConfig['):
+        assert 'type' in value, f'Value must be a dict and should have "type". {value}'
+        cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
+    if pop:
+        value.pop('type', None)
+    return cls
 
 
 def _is_type(value, type_hint) -> bool:
@@ -155,19 +173,7 @@ def _construct_with_type(value, type_hint) -> Any:
         value = cls(value)
     # convert nested dict to config type
     if isinstance(value, dict):
-        if type_name.startswith('RegistryConfig['):
-            registry = cls.__args__[0]
-            assert isinstance(registry, Registry), 'Type in RegisterConfig should be a registry.'
-            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
-            assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
-            cls = PythonConfig.from_type(registry.get(value['type']))
-            value.pop('type')
-        if type_name.startswith('ClassConfig['):
-            cls = PythonConfig.from_type(cls.__args__[0])
-        if type_name.startswith('SubclassConfig['):
-            assert 'type' in value, f'Value must be a dict and should have "type". {value}'
-            cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
-            value.pop('type')
+        cls = _recognize_class_from_class_config(cls, value)
         if isinstance(cls, type) and issubclass(cls, PythonConfig):
             value = cls(**value)
         elif not type_name.startswith('Dict['):
@@ -301,11 +307,31 @@ class PythonConfig:
         return cls(**config)
 
     @classmethod
-    def fromcli(cls, shortcuts=None, allow_rest=False, receive_nni=False, respect_config=True):
-        """
-        Parse command line from a mandatory config file and optional arguments, like
+    def fromcli(cls, *,
+                shortcuts: Optional[Dict[str, str]] = None,
+                allow_rest: bool = False,
+                receive_nni: bool = False,
+                respect_config: bool = True) -> Union['PythonConfig', Tuple['PythonConfig', List[str]]]:
+        """Parse command line from a mandatory config file and optional arguments, like
 
             python main.py exp.yaml --learning_rate 1e-4
+
+        Args:
+            shortcuts (Optional[Dict[str, str]], optional): To create short command line arguments.
+                In the form of ``{'-lr': 'trainer.learning_rate'}``. Defaults to None.
+            allow_rest (bool, optional): If false, check if there is any unrecognized
+                command line arguments. If false, ignore them. Defaults to False.
+            receive_nni (bool, optional): Receive next parameters from NNI. Defaults to False.
+            respect_config (bool, optional): Will try to read the config file first and get information
+                like types to build a more comprehensive command line parser. Defaults to True.
+
+        Raises:
+            ValidationError: Config file is invalid.
+
+        Returns:
+            Union[PythonConfig, Tuple[PythonConfig, List[str]]]:
+                If ``allow_rest``, a tuple of parsed config and the rest of command line arguments will be returned.
+                Otherwise, the parse config only.
         """
         parser = ArgumentParser(add_help=False)
         parser.add_argument('exp', help='Experiment YAML file')
@@ -371,13 +397,18 @@ class PythonConfig:
         names = []
         for field in fields(cls):
             field_type = _strip_optional(field.type)
+            field_type_name = _strip_import_path(str(field_type))
             if is_dataclass(field_type):
                 assert issubclass(field_type, PythonConfig), f'Interface class {field_type} must be a subclass of `PythonConfig`.'
                 names += field_type._build_command_line_parser(parser, shortcuts, default_config.get(field.name, {}),
                                                                prefix=prefix + field.name + '.')
-            elif any(_strip_import_path(str(field_type)).startswith(config_type + '[')
+            elif any(field_type_name.startswith(config_type + '[')
                      for config_type in ['ClassConfig', 'RegistryConfig', 'SubclassConfig']):
-                if field.name in default_config:
+                field_type_guess = _recognize_class_from_class_config(field.type, default_config.get(field.name, {}), pop=False)
+                if is_dataclass(field_type_guess):
+                    names += field_type_guess._build_command_line_parser(parser, shortcuts, default_config.get(field.name, {}),
+                                                                         prefix=prefix + field.name + '.')
+                elif field.name in default_config:
                     assert isinstance(default_config[field.name], dict), f'Expected {default_config[field.name]} to be a dict.'
                     for key, value in default_config[field.name].items():
                         name = prefix + field.name + '.' + key

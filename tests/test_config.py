@@ -1,6 +1,6 @@
 import os
 from multiprocessing import Pool, Value
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 
 import pytest
 from utilsd.config import ClassConfig, PythonConfig, Registry, RegistryConfig, SubclassConfig, ValidationError, configclass
@@ -90,6 +90,22 @@ class CfgWithSubclass(PythonConfig):
     t: SubclassConfig[BaseBar]
 
 
+class TEST(metaclass=Registry, name="test"):
+    pass
+
+
+@TEST.register_module()
+class TestModule:
+    def __init__(self, a: int = 1, b: Optional[str] = None):
+        self.a = a
+        self.b = b
+
+
+@configclass
+class RegistryModuleConfig(PythonConfig):
+    test: RegistryConfig[TEST]
+
+
 def test_python_config():
     assert Foo(a=1, b=2.0, c={'n': 0}).c.n == 0
 
@@ -164,9 +180,21 @@ def test_parse_command_line_dynamic():
         assert CfgWithSubclass.fromcli().t.build().a == 2
 
 
+def test_registry_config_command_line():
+    config_fp = os.path.join(os.path.dirname(__file__), 'assets/registry1.yml')
+    with patch('argparse._sys.argv', ['test.py', config_fp, '--test.a', '2']):
+        config = RegistryModuleConfig.fromcli()
+        assert config.test.a == 2
+    config_fp = os.path.join(os.path.dirname(__file__), 'assets/registry2.yml')
+    with patch('argparse._sys.argv', ['test.py', config_fp, '--test.b', 'test']):
+        config = RegistryModuleConfig.fromcli()
+        assert config.test.b == 'test'
+
+
 if __name__ == '__main__':
     test_python_config()
     test_parse_command_line()
     test_registry()
     test_registry_config()
     test_class_config()
+    test_registry_config_command_line()

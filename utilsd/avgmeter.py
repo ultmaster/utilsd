@@ -3,8 +3,8 @@ Currently it's same as https://kaiyangzhou.github.io/deep-person-reid/_modules/t
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 import numpy as np
-import torch
 
 __all__ = ['AverageMeter', 'MetricMeter']
 
@@ -72,7 +72,10 @@ class MetricMeter(object):
             )
 
         for k, v in input_dict.items():
-            self.meters[k].update(v)
+            if isinstance(v, (Sequence, np.ndarray)):
+                self.meters[k].update(np.mean(v), np.size(v))
+            else:
+                self.meters[k].update(v)
 
     def __str__(self):
         output_str = []
