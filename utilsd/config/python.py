@@ -85,6 +85,7 @@ def _find_class(cls_name: str, base_class: Type) -> Type:
 
 
 def _recognize_class_from_class_config(cls, value, pop=True):
+    changed = False
     type_name = _strip_import_path(str(cls))
     if type_name.startswith('RegistryConfig['):
         registry = cls.__args__[0]
@@ -92,12 +93,15 @@ def _recognize_class_from_class_config(cls, value, pop=True):
         assert 'type' in value, f'Value must be a dict and should have "type". {value}'
         assert value['type'] in registry, f'Registry {registry} does not have {value["type"]}.'
         cls = PythonConfig.from_type(registry.get(value['type']))
+        changed = True
     elif type_name.startswith('ClassConfig['):
         cls = PythonConfig.from_type(cls.__args__[0])
+        changed = True
     elif type_name.startswith('SubclassConfig['):
         assert 'type' in value, f'Value must be a dict and should have "type". {value}'
         cls = PythonConfig.from_type(_find_class(value['type'], cls.__args__[0]))
-    if pop:
+        changed = True
+    if changed and pop:  # figured this is a class config. Type is no longer needed.
         value.pop('type', None)
     return cls
 

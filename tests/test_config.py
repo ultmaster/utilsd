@@ -64,6 +64,14 @@ class InitWithComplexType:
             self.converter = converter.build()
 
 
+class InitWithComplexTypeSubclass:
+    def __init__(self, converter: Union[BaseFoo, SubclassConfig[BaseFoo]]):
+        if isinstance(converter, BaseFoo):
+            self.converter = converter
+        else:
+            self.converter = converter.build()
+
+
 class DependencyInjectionClass:
     def __init__(self, m: Converter1):
         self.m = m
@@ -77,6 +85,11 @@ class DependencyInjectionClassType(PythonConfig):
 @configclass
 class CfgInitWithComplexType(PythonConfig):
     m: ClassConfig[InitWithComplexType]
+
+
+@configclass
+class CfgInitWithComplexTypeSubclass(PythonConfig):
+    m: ClassConfig[InitWithComplexTypeSubclass]
 
 
 @configclass
@@ -140,6 +153,11 @@ def test_registry_config_complex_union():
     assert isinstance(config.m.build().converter, Converter1)
 
 
+def test_registry_config_complex_subclass_union():
+    config = CfgInitWithComplexTypeSubclass(m=dict(converter=dict(type='SubFoo')))
+    assert isinstance(config.m.build().converter, SubFoo)
+
+
 def test_class_config():
     assert FooN(n={'a': 1, 'b': 2}).n.a == 1
     with pytest.raises(ValidationError):
@@ -192,9 +210,4 @@ def test_registry_config_command_line():
 
 
 if __name__ == '__main__':
-    test_python_config()
-    test_parse_command_line()
-    test_registry()
-    test_registry_config()
-    test_class_config()
-    test_registry_config_command_line()
+    test_registry_config_complex_subclass_union()
