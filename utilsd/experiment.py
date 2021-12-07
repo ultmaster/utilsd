@@ -142,7 +142,10 @@ def get_tb_log_dir() -> Path:
 
 
 def is_debugging() -> bool:
-    return get_runtime_config().debug
+    try:
+        return get_runtime_config().debug
+    except AssertionError:
+        return False
 
 
 def use_cuda(enable: Optional[bool] = None) -> bool:
