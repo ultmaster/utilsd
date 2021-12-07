@@ -306,16 +306,16 @@ class PythonConfig:
         return True
 
     @classmethod
-    def fromfile(cls, filename, **kwargs):
+    def fromfile(cls: T, filename: str, **kwargs) -> T:
         config = Config.fromfile(filename, **kwargs)
         return cls(**config)
 
     @classmethod
-    def fromcli(cls, *,
+    def fromcli(cls: T, *,
                 shortcuts: Optional[Dict[str, str]] = None,
                 allow_rest: bool = False,
                 receive_nni: bool = False,
-                respect_config: bool = True) -> Union['PythonConfig', Tuple['PythonConfig', List[str]]]:
+                respect_config: bool = True) -> Union[T, Tuple[T, List[str]]]:
         """Parse command line from a mandatory config file and optional arguments, like
 
             python main.py exp.yaml --learning_rate 1e-4
@@ -444,7 +444,7 @@ class PythonConfig:
         return names
 
     @classmethod
-    def from_type(cls, t: Type):
+    def from_type(cls: T, t: Type) -> T:
         class_name = t.__name__ + 'Config'
         init_signature = inspect.signature(t.__init__)
         fields = [
