@@ -298,7 +298,7 @@ class Config:
         Args:
             cfg_str (str): Config str.
             file_format (str): Config file format corresponding to the
-               config str. Only py/yml/yaml/json type are supported now!
+            config str. Only py/yml/yaml/json type are supported now!
         Returns:
             obj:`Config`: Config obj.
         """

@@ -10,52 +10,12 @@ Welcome to utilsd's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
-API references
-==============
-
-analysis
---------
-
-.. automodule:: utilsd.analysis
-    :members:
-
-config
-------
-
-.. automodule:: utilsd.config
-    :members:
-
-fileio
-------
-
-.. automodule:: utilsd.fileio
-    :members:
-
-search
-------
-
-.. automodule:: utilsd.search
-    :members:
-
-misc
-----
-
-.. automodule:: utilsd.avgmeter
-    :members:
-
-.. automodule:: utilsd.earlystop
-    :members:
-
-.. automodule:: utilsd.experiment
-    :members:
-
-.. automodule:: utilsd.logging
-    :members:
+   Tutorials <tutorials>
+   API references <references>
 
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

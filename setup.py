@@ -42,7 +42,7 @@ setuptools.setup(
     ],
     extras_require={
         'full': ['torch>=1.7.1'],
-        'docs': ['sphinx'],
+        'docs': ['sphinx', 'nbsphinx'],
     },
     entry_points={
         'console_scripts': [
