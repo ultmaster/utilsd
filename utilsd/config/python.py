@@ -133,7 +133,11 @@ def _is_type(value, type_hint) -> bool:
         if not isinstance(value, dict):
             return False
         return all([_is_type(k, type_hint.__args__[0]) and _is_type(v, type_hint.__args__[1]) for k, v in value.items()])
-    return isinstance(value, type_hint)
+    try:
+        return isinstance(value, type_hint)
+    except TypeError:
+        # unsupported types like Callable[[], ...]
+        return False
 
 
 def _construct_with_type(value, type_hint) -> Any:

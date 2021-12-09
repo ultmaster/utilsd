@@ -1,10 +1,10 @@
 import os
-from typing import Union
-
 import pathlib
 import typing
+from typing import Union
 
-from utilsd.config import PythonConfig, configclass
+import pytest
+from utilsd.config import PythonConfig, configclass, ValidationError
 from utilsd.config.python import _is_path_like
 
 
@@ -33,3 +33,9 @@ def test_union():
     assert _test_type(Union[pathlib.Path, Foo], {'bar': 2}).bar == 2
     assert _test_type(Union[str, typing.Tuple[str, str]], ['1', '2']) == ('1', '2')
     assert _test_type(Union[pathlib.Path, None], None) == None
+
+
+def test_callable():
+    with pytest.raises(ValidationError) as e_info:
+        assert _test_type(typing.Callable[[], str], lambda x: x)
+    assert 'Callable[[], str]' in str(e_info)
