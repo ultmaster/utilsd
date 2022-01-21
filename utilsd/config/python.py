@@ -172,6 +172,8 @@ def _construct_with_type(value, type_hint) -> Any:
     if cls == float:
         value = float(value)
     if cls == int:
+        # avoid mistakenly converting float to int
+        assert isinstance(value, (int, str))
         value = int(value)
     if cls == str:
         assert isinstance(value, (int, float, str))

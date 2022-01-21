@@ -1,7 +1,7 @@
 import os
 import pathlib
 import typing
-from typing import Union
+from typing import Union, List
 
 import pytest
 from utilsd.config import PythonConfig, configclass, ValidationError
@@ -39,3 +39,8 @@ def test_callable():
     with pytest.raises(ValidationError) as e_info:
         assert _test_type(typing.Callable[[], str], lambda x: x)
     assert 'Callable[[], str]' in str(e_info)
+
+
+def test_union_int_float():
+    assert _test_type(Union[int, float], 2.5) == 2.5
+    assert _test_type(List[Union[int, float]], [1, 2.5]) == [1, 2.5]
