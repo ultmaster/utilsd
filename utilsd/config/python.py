@@ -38,29 +38,6 @@ class SubclassConfig(Generic[T]):
 __all__ = ['PythonConfig', 'ClassConfig', 'RegistryConfig']
 
 
-def _is_missing(obj: Any) -> bool:
-    return isinstance(obj, type(dataclasses.MISSING))
-
-
-def _strip_optional(type_hint):
-    if str(type_hint).startswith('typing.Optional['):
-        return _strip_optional(type_hint.__args__[0])
-    if str(type_hint).startswith('typing.Union[') and type_hint.__args__[1] == type(None):
-        return _strip_optional(type_hint.__args__[0])
-    return type_hint
-
-
-def _strip_import_path(type_name):
-    return type_name.replace('typing.', '').replace('utilsd.config.python.', '')
-
-
-def _is_path_like(type_hint):
-    return _strip_optional(type_hint) in (Path, PosixPath, os.PathLike)
-
-
-def _is_tuple(type_hint):
-    return str(type_hint).startswith('Tuple')
-
 
 def _iterate_subclass(base_class: Type) -> Iterator[Type]:
     for subclass in base_class.__subclasses__():

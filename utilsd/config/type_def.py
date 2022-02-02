@@ -9,12 +9,12 @@ import os
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, Optional, Type, TypeVar, Generic, Union, List, Tuple
+from typing import Any, Dict, Optional, Type, TypeVar, Generic, Union, List, Tuple, Iterable
 
 import typeguard
 
 from .exception import ValidationError
-from .registry import Registry
+from .registry import ClassConfig, Registry, RegistryConfig, dataclass_from_class
 
 T = TypeVar('T')
 
@@ -371,15 +371,15 @@ class PrimitiveDef(TypeDef):
         if not isinstance(plain, self.primitive_types):
             raise ValueError(f'Cannot implicitly cast a variable with type {type(plain)}'
                              f' to {self.primitive_types}: {plain}')
-        if issubclass(self.type_, float):
+        if issubclass(self.type, float):
             return float(plain)
-        if issubclass(self.type_, (int, bool)):
+        if issubclass(self.type, (int, bool)):
             # check converting to int is not numerically equal
             # to avoid mistakenly converting float to int
             if int(plain) != plain:
                 raise ValueError(f'Cannot implicitly cast float {plain} to int or bool')
             return int(plain)
-        return self.type_(plain)
+        return self.type(plain)
 
     def to_plain(self, obj):
         if not isinstance(obj, self.type):
@@ -391,7 +391,8 @@ class DataclassDef(TypeDef):
     @classmethod
     def new(cls, type_):
         if dataclasses.is_dataclass(type_):
-            return cls(type_)
+            self = cls(type_)
+            return self
         return None
 
     @staticmethod
@@ -404,14 +405,16 @@ class DataclassDef(TypeDef):
                                  getattr(converted, field.name),
                                  field.type)
 
-    def from_plain(self, plain, ctx):
+    def from_plain(self, plain, ctx, type_=None):
+        if type_ is None:
+            type_ = self.type
         if not isinstance(plain, dict):
             raise ValueError(f'Expect a dict, but found {type(plain)}: {plain}')
         # the content with name `_meta` is ignored
         # it is reserved for writing comments
         _meta = plain.pop('_meta', None)
         kwargs = {}
-        for field in dataclasses.fields(self.type_):
+        for field in dataclasses.fields(type_):
             # get the values with content, otherwise default
             value = plain.pop(field.name, field.default)
             # if no default value exists
@@ -423,24 +426,123 @@ class DataclassDef(TypeDef):
             kwargs[field.name] = value
         if plain:
             fields = ', '.join(plain.keys())
-            raise ValueError(f'{self.type_.__name__}: Unrecognized fields {fields}')
+            raise ValueError(f'{type_.__name__}: Unrecognized fields {fields}')
 
         # creating dataclass
-        inst = self.type_(**kwargs)
+        inst = type_(**kwargs)
         inst._meta = _meta
         return inst
 
-    def to_plain(self, obj, ctx):
-        if not isinstance(obj, self.type):
-            raise ValueError(f'Expected {self.type}, found {obj} (type: {type(obj)})')
-        result = {}
+    def to_plain(self, obj, ctx, type_=None, result=None):
+        if type_ is None:
+            type_ = self.type
+        if not isinstance(obj, type_):
+            raise ValueError(f'Expected {type_}, found {obj} (type: {type(obj)})')
+        if not result:
+            result = {}
         for field in dataclasses.fields(obj):
             with ctx.onto(field.name):
+                value = getattr(obj, field.name)
                 result[field.name] = TypeDef.dump(field.type, value)
         return result
+
+
+class ClassConfigDef(DataclassDef):
+    @classmethod
+    def new(cls, type_):
+        if getattr(type_, '__origin__', None) == ClassConfig:
+            self = cls(type_)
+            self.inner_type = dataclass_from_class(type_.__args__[0])
+            return self
+        return None
+
+    def from_plain(self, plain, ctx):
+        return super().from_plain(plain, ctx, type=self.inner_type)
+
+    def to_plain(self, obj, ctx):
+        return super().to_plain(obj, ctx, type=self.inner_type)
+
+
+class RegistryConfigDef(DataclassDef):
+    @classmethod
+    def new(cls, type_):
+        if getattr(type_, '__origin__', None) == RegistryConfig:
+            self = cls(type_)
+            # inner type is not available here
+            self.registry = self.type.__args__[0]
+            return self
+        return None
+
+    def from_plain(self, plain, ctx):
+        if not isinstance(plain, dict) and 'type' in plain:
+            raise ValueError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
+        type_ = self.registry.get(plain['type'])
+        dataclass = dataclass_from_class(type_)
+        return super().from_plain(plain, ctx, type=dataclass)
+
+    def to_plain(self, obj, ctx):
+        # obj is a dataclass, type() is its original class
+        type_name = self.registry.inverse_get(obj.type())
+        return super().to_plain(obj, ctx, type=obj.type(), result={'type': type_name})
+
+
+class SubclassConfigDef(DataclassDef):
+    @classmethod
+    def new(cls, type_):
+        if getattr(type_, '__origin__', None) == RegistryConfig:
+            self = cls(type_)
+            # inner type is not available here
+            self.base_class = self.type.__args__[0]
+            return self
+        return None
+
+    @staticmethod
+    def _find_class(cls_name: str, base_class: Type) -> Type:
+        def _iterate_subclass(base_class: Type) -> Iterable[Type]:
+            for subclass in base_class.__subclasses__():
+                yield subclass
+                yield from _iterate_subclass(subclass)
+
+        for subclass in _iterate_subclass(base_class):
+            if subclass.__name__ == cls_name:
+                return subclass
+            if hasattr(subclass, 'alias') and subclass.alias == cls_name:
+                return subclass
+        if '.' in cls_name:
+            path, identifier = cls_name.rsplit('.', 1)
+            module = __import__(path, globals(), locals(), [identifier])
+            if hasattr(module, identifier):
+                subclass = getattr(module, identifier)
+                assert issubclass(subclass, base_class), f'{subclass} is not a subclass of {base_class}.'
+                return subclass
+        raise ValueError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
+
+    def from_plain(self, plain, ctx):
+        if not isinstance(plain, dict) and 'type' in plain:
+            raise ValueError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
+        type_ = self._find_class(plain['type'], self.base_class)
+        return super().from_plain(plain, ctx, type=type_)
+
+    def to_plain(self, obj, ctx):
+        # obj is a dataclass, type() is its original class
+        class_type = obj.type()
+        import_path = class_type.__module__.__name__ + '.' + class_type.__class__.__name__
+        if self._find_class(import_path) != class_type:
+            raise ValueError(f'{class_type} cannot be created via importing from {import_path}')
+        return super().to_plain(obj, ctx, type=class_type, result={'type': import_path})
 
 
 # register all the modules in this file
 TypeDefRegistry.register_module(module=AnyDef)
 TypeDefRegistry.register_module(module=OptionalDef)
 TypeDefRegistry.register_module(module=PathDef)
+TypeDefRegistry.register_module(module=ListDef)
+TypeDefRegistry.register_module(module=TupleDef)
+TypeDefRegistry.register_module(module=DictDef)
+TypeDefRegistry.register_module(module=EnumDef)
+TypeDefRegistry.register_module(module=UnionDef)
+TypeDefRegistry.register_module(module=PrimitiveDef)
+TypeDefRegistry.register_module(module=DataclassDef)
+TypeDefRegistry.register_module(module=ClassConfigDef)
+TypeDefRegistry.register_module(module=RegistryConfigDef)
+TypeDefRegistry.register_module(module=SubclassConfigDef)
