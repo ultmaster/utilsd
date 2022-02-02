@@ -1,4 +1,12 @@
+"""
+Convert to / from a plain-type python object to a complex type,
+with type-checking/conversion based on type annotations.
+"""
+
+import dataclasses
+import functools
 import os
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path, PosixPath
 from typing import Any, Dict, Optional, Type, TypeVar, Generic, Union, List, Tuple
@@ -13,6 +21,47 @@ T = TypeVar('T')
 
 class TypeDefRegistry(metaclass=Registry, name='type_def'):
     pass
+
+
+class ParseContext:
+    """Necessary information to generate accurate error message."""
+
+    def __init__(self):
+        self.path: List[str] = []
+        self.matches: List[List[str]] = []
+
+    @contextmanager
+    def onto(self, name):
+        self.path.append(name)
+        self.matches.append([])
+        try:
+            yield
+        finally:
+            self.path.pop()
+            self.matches.pop()
+
+    @contextmanager
+    def match_type(self, type):
+        self.matches[-1].append(type)
+        try:
+            yield
+        finally:
+            self.matches[-1].pop()
+
+    @property
+    def message(self) -> Tuple[str]:
+        return (
+            ' -> '.join(self.path) + '\n',
+            ' -> '.join(self.matches[-1]) + '\n',
+        )
+
+
+def pass_context(func):
+    """Pass context object for subclassed processors"""
+    @functools.wraps
+    def wrapper(*args, **kwargs):
+        return func(*args, ctx=kwargs.get('ctx'), **kwargs)
+    return wrapper
 
 
 class TypeDef(Generic[T]):
@@ -43,37 +92,43 @@ class TypeDef(Generic[T]):
     def new(cls, type_: Type) -> Optional['TypeDef']:
         return None
 
-    def from_plain(self, plain: Any) -> T:
+    def from_plain(self, plain: Any, ctx: Optional[ParseContext] = None) -> T:
         return plain
 
-    def to_plain(self, obj: T) -> Any:
+    def to_plain(self, obj: T, ctx: Optional[ParseContext] = None) -> Any:
         return obj
 
     @staticmethod
-    def dump(type_def: Type[T], obj: T) -> Any:
+    def dump(type_def: Type[T], obj: T, ctx: Optional[ParseContext] = None) -> Any:
         for subclass in TypeDefRegistry.values():
             t = subclass(type_def)
             if t is not None:
                 # found a handler
                 try:
-                    return t.to_plain(obj)
+                    return t.to_plain(obj, ctx=ctx)
                 except (TypeError, ValueError) as e:
-                    # add message for location and union (helper) here
-                    ...
+                    # add message for location here
+                    err_message = 'Object can not be dumped.'
+                    if ctx is not None and ctx.formatted_path:
+                        err_message += ' Cause: ' + ctx.formatted_path
+                    raise ValidationError(err_message)
         raise TypeError(f'No hook found for type definition: {type_def}')
 
     @staticmethod
-    def load(type_def: Type[T], payload: Any) -> T:
+    def load(type_def: Type[T], payload: Any, ctx: Optional[ParseContext] = None) -> T:
         for subclass in TypeDefRegistry.values():
             t = subclass(type_def)
             if t is not None:
                 # found a handler
                 try:
-                    converted = t.from_plain(payload)
+                    converted = t.from_plain(payload, ctx=ctx)
                     t.validate(converted)
                     return converted
                 except (TypeError, ValueError) as e:
-                    ...
+                    err_message = 'Object can not be loaded.'
+                    if ctx is not None and ctx.formatted_path:
+                        err_message += ' Cause: ' + ctx.formatted_path
+                    raise ValidationError(err_message)
         raise TypeError(f'No hook found for type definition: {type_def}')
 
 
@@ -84,10 +139,11 @@ class AnyDef(TypeDef):
             return cls(type_)
         return None
 
-    def from_plain(self, plain):
+    def from_plain(self, plain, ctx=None):
+        # no need to pass context here
         return plain
 
-    def to_plain(self, obj):
+    def to_plain(self, obj, ctx=None):
         return obj
 
 
@@ -103,13 +159,13 @@ class OptionalDef(TypeDef):
             return None
         return self
 
-    def from_plain(self, plain):
-        return TypeDef.load(self.inner_type, plain)
+    def from_plain(self, plain, ctx=ctx):
+        return TypeDef.load(self.inner_type, plain, ctx=ctx)
 
     def to_plain(self, obj):
         if obj is None:
             return None
-        return TypeDef.dump(self.inner_type, obj)
+        return TypeDef.dump(self.inner_type, obj, ctx=ctx)
 
 
 class PathDef(TypeDef):
@@ -283,7 +339,49 @@ class PrimitiveDef(TypeDef):
 
 
 class DataclassDef(TypeDef):
-    pass
+    @classmethod
+    def new(cls, type_):
+        if dataclasses.is_dataclass(type_):
+            return cls(type_)
+        return None
+
+    @staticmethod
+    def _is_missing(obj: Any) -> bool:
+        return isinstance(obj, type(dataclasses.MISSING))
+
+    def from_plain(self, plain):
+        if not isinstance(plain, self.primitive_types):
+            raise ValueError(f'Expect a dict, but found {type(plain)}: {plain}')
+        self._meta = plain.pop('_meta', None)
+        class_name = type(self).__name__
+        for field in dataclasses.fields(self):
+            value = kwargs.pop(field.name, field.default)
+            if value is not None and not self._is_missing(value):
+                value = TypeDef.load(field.type, value)
+            setattr(self, field.name, value)
+        if kwargs:
+            cls = type(self).__name__
+            fields = ', '.join(kwargs.keys())
+            raise ValidationError(f'{cls}: Unrecognized fields {fields}')
+        self.validate()
+        # support implicit conversion here
+        if not isinstance(plain, self.primitive_types):
+            raise ValueError(f'Cannot implicitly cast a variable with type {type(plain)}'
+                             f' to {self.primitive_types}: {plain}')
+        if issubclass(self.type_, float):
+            return float(plain)
+        if issubclass(self.type_, (int, bool)):
+            # check converting to int is not numerically equal
+            # to avoid mistakenly converting float to int
+            if int(plain) != plain:
+                raise ValueError(f'Cannot implicitly cast float {plain} to int or bool')
+            return int(plain)
+        return self.type_(plain)
+
+    def to_plain(self, obj):
+        if not isinstance(obj, self.type):
+            raise ValueError(f'Expected {self.type}, found {obj} (type: {type(obj)}')
+        return obj
 
 
 # register all the modules in this file

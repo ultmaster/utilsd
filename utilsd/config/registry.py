@@ -1,6 +1,7 @@
 # Modified from https://github.com/open-mmlab/mmcv/blob/master/mmcv/utils/registry.py
 
 import inspect
+from typing import Optional, Type, Union
 
 
 class Registry(type):
