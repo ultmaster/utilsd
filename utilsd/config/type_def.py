@@ -91,9 +91,9 @@ class TypeDef(Generic[T]):
     def __init__(self, type_: Type[T]) -> None:
         self.type = type_
 
-    def validate(self, name: str, converted: T) -> None:
+    def validate(self, converted: T, ctx: ParseContext) -> None:
         # when something goes wrong, check_type raises TypeError
-        typeguard.check_type(name, converted, self.type)
+        typeguard.check_type(ctx.current_name, converted, self.type)
 
     @classmethod
     def new(cls, type_: Type) -> Optional['TypeDef']:
@@ -106,11 +106,9 @@ class TypeDef(Generic[T]):
         raise NotImplementedError()
 
     @staticmethod
-    def dump(type_def: Type[T], obj: T, ctx: Optional[ParseContext] = None) -> Any:
-        if ctx is None:
-            ctx = ParseContext
+    def dump(type: Type[T], obj: T, ctx: ParseContext) -> Any:
         for subclass in TypeDefRegistry.values():
-            t = subclass(type_def)
+            t = subclass(type)
             if t is not None:
                 # found a handler
                 def_name = subclass.__name__.lower()
@@ -119,7 +117,7 @@ class TypeDef(Generic[T]):
                 try:
                     with ctx.match(def_name):
                         return t.to_plain(obj, ctx)
-                except (TypeError, ValueError) as e:
+                except (TypeError, ValueError):
                     # add message for location here
                     err_message = 'Object can not be dumped.'
                     if ctx.message:
@@ -127,12 +125,12 @@ class TypeDef(Generic[T]):
                             ctx.message[0] + '\n  Matched types: ' + \
                             ctx.message[1] + '\n  Object: ' + str(obj)
                     raise ValidationError(err_message)
-        raise TypeError(f'No hook found for type definition: {type_def}')
+        raise TypeError(f'No hook found for type: {type}')
 
     @staticmethod
-    def load(type_def: Type[T], payload: Any, ctx: Optional[ParseContext] = None) -> T:
+    def load(type: Type[T], payload: Any, ctx: ParseContext) -> T:
         for subclass in TypeDefRegistry.values():
-            t = subclass(type_def)
+            t = subclass(type)
             if t is not None:
                 # found a handler
                 # get its name, e.g., optional, any, path
@@ -144,14 +142,14 @@ class TypeDef(Generic[T]):
                         converted = t.from_plain(payload, ctx)
                         t.validate(ctx.current_name, converted)
                         return converted
-                except (TypeError, ValueError) as e:
+                except (TypeError, ValueError):
                     err_message = 'Object can not be loaded.'
                     if ctx.message:
                         err_message += ' Cause:\n  Parsing: ' + \
                             ctx.message[0] + '\n  Matched types: ' + \
                             ctx.message[1] + '\n  Object: ' + str(payload)
                     raise ValidationError(err_message)
-        raise TypeError(f'No hook found for type definition: {type_def}')
+        raise TypeError(f'No hook found for type: {type}')
 
 
 class AnyDef(TypeDef):
@@ -399,11 +397,25 @@ class DataclassDef(TypeDef):
     def _is_missing(obj: Any) -> bool:
         return isinstance(obj, type(dataclasses.MISSING))
 
-    def validate(self, name, converted):
+    def validate(self, converted, ctx):
         for field in dataclasses.fields(converted):
-            typeguard.check_type(f'{name} -> {field.name}',
+            typeguard.check_type(f'{ctx.current_name} -> {field.name}',
                                  getattr(converted, field.name),
                                  field.type)
+
+        # if dataclass has a post validation
+        if hasattr(converted, 'post_validate'):
+            try:
+                result = converted.post_validate()
+            except Exception as e:
+                raise ValueError(f'{ctx.current_name}: validation failed. {repr(e)}')
+            if isinstance(result, bool):
+                if not result:
+                    raise ValueError(f'{ctx.current_name}: post validation failed')
+            else:
+                ok, message = result
+                if not ok:
+                    raise ValueError(f'{ctx.current_name}: post validation failed with: {message}')
 
     def from_plain(self, plain, ctx, type_=None):
         if type_ is None:
