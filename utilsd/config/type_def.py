@@ -5,11 +5,12 @@ with type-checking/conversion based on type annotations.
 
 import copy
 import dataclasses
+import inspect
 import os
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, Optional, Type, TypeVar, Generic, Union, List, Tuple, Iterable
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Generic, Union, List, Tuple, Iterable
 
 import typeguard
 
@@ -74,10 +75,8 @@ class ParseContext:
 
     @property
     def message(self) -> Optional[Tuple[str]]:
-        if not self.path:
-            return None
         return (
-            ' -> '.join(map(str, self.path)),
+            ' -> '.join(map(str, self.path)) if self.path else '<root>',
             ' -> '.join(self.matches[-1]) if self.matches[-1] else 'empty',
         )
 
@@ -122,7 +121,7 @@ class TypeDef(Generic[T]):
 
     def validate(self, converted: T, ctx: ParseContext) -> None:
         # when something goes wrong, check_type raises TypeError
-        typeguard.check_type(ctx.current_name, converted, self.type)
+        typeguard.check_type(f'{converted} ({ctx.current_name})', converted, self.type)
 
     @classmethod
     def new(cls, type_: Type) -> Optional['TypeDef']:
@@ -135,49 +134,53 @@ class TypeDef(Generic[T]):
         raise NotImplementedError()
 
     @staticmethod
-    def dump(type: Type[T], obj: T, ctx: ParseContext) -> Any:
-        for subclass in TypeDefRegistry.values():
-            t = subclass(type)
+    def dump(type: Type[T], obj: T, ctx: Optional[ParseContext] = None) -> Any:
+        if ctx is None:
+            ctx = ParseContext()
+        for subclass in TypeDefRegistry.module_dict.values():
+            t = subclass.new(type)
             if t is not None:
                 # found a handler
                 def_name = subclass.__name__.lower()
                 if def_name.endswith('def'):
                     def_name = def_name[:-3]
-                try:
-                    with ctx.match(def_name):
+                with ctx.match(def_name):
+                    try:
                         return t.to_plain(obj, ctx)
-                except (TypeError, ValueError, ImportError):
-                    # add message for location here
-                    err_message = 'Object can not be dumped.'
-                    if ctx.message:
-                        err_message += ' Cause:\n  Parsing: ' + \
-                            ctx.message[0] + '\n  Matched types: ' + \
-                            ctx.message[1] + '\n  Object: ' + str(obj)
-                    raise ValidationError(err_message)
+                    except (TypeError, ValueError, ImportError) as e:
+                        # add message for location here
+                        err_message = 'Object can not be dumped.'
+                        if ctx.message:
+                            err_message += ' Cause: ' + str(e) + '\n  Parser location: ' + \
+                                ctx.message[0] + '\n  Matched types: ' + \
+                                ctx.message[1] + '\n  Object: ' + str(obj)
+                        raise ValidationError(err_message)
         raise TypeError(f'No hook found for type: {type}')
 
     @staticmethod
-    def load(type: Type[T], payload: Any, ctx: ParseContext) -> T:
-        for subclass in TypeDefRegistry.values():
-            t = subclass(type)
+    def load(type: Type[T], payload: Any, ctx: Optional[ParseContext] = None) -> T:
+        if ctx is None:
+            ctx = ParseContext()
+        for subclass in TypeDefRegistry.module_dict.values():
+            t = subclass.new(type)
             if t is not None:
                 # found a handler
                 # get its name, e.g., optional, any, path
                 def_name = subclass.__name__.lower()
                 if def_name.endswith('def'):
                     def_name = def_name[:-3]
-                try:
-                    with ctx.match(def_name):
+                with ctx.match(def_name):
+                    try:
                         converted = t.from_plain(payload, ctx)
-                        t.validate(ctx.current_name, converted)
+                        t.validate(converted, ctx)
                         return converted
-                except (TypeError, ValueError, ImportError):
-                    err_message = 'Object can not be loaded.'
-                    if ctx.message:
-                        err_message += ' Cause:\n  Parsing: ' + \
-                            ctx.message[0] + '\n  Matched types: ' + \
-                            ctx.message[1] + '\n  Object: ' + str(payload)
-                    raise ValidationError(err_message)
+                    except (TypeError, ValueError, ImportError) as e:
+                        err_message = 'Object can not be loaded.'
+                        if ctx.message:
+                            err_message += ' Cause: ' + str(e) + '\n  Parser location: ' + \
+                                ctx.message[0] + '\n  Matched types: ' + \
+                                ctx.message[1] + '\n  Object: ' + str(payload)
+                        raise ValidationError(err_message)
         raise TypeError(f'No hook found for type: {type}')
 
 
@@ -244,8 +247,8 @@ class ListDef(TypeDef):
             # e.g., List[int]
             self.inner_type = type_.__args__[0]
             return self
-        elif issubclass(type_, list):
-            raise TypeError('Please use `List[Any]` instead of list.')
+        elif inspect.isclass(type_) and issubclass(type_, list):
+            raise TypeError('Please use `List[Any]` instead of general sequence type like `list`.')
         return None
 
     def from_plain(self, plain, ctx):
@@ -276,7 +279,7 @@ class TupleDef(TypeDef):
             # e.g., Tuple[int, str, float]
             self.inner_types = type_.__args__
             return self
-        elif issubclass(type_, tuple):
+        elif inspect.isclass(type_) and issubclass(type_, tuple):
             raise TypeError('Please use `Tuple[xxx]` instead of tuple.')
         return None
 
@@ -309,7 +312,7 @@ class DictDef(TypeDef):
             self.key_type = type_.__args__[0]
             self.value_type = type_.__args__[1]
             return self
-        elif issubclass(type_, dict):
+        elif inspect.isclass(type_) and issubclass(type_, dict):
             raise TypeError('Please use `Dict[xxx, xxx]` instead of dict.')
         return None
 
@@ -342,7 +345,7 @@ class DictDef(TypeDef):
 class EnumDef(TypeDef):
     @classmethod
     def new(cls, type_):
-        if isinstance(type_, type) and issubclass(type_, Enum):
+        if inspect.isclass(type_) and issubclass(type_, Enum):
             return cls(type_)
         return None
 
@@ -371,11 +374,11 @@ class UnionDef(TypeDef):
         def _try_types(types):
             if not types:
                 raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
-            try:
-                with ctx.match(f'union:{types[0].__name__}'):
+            with ctx.match(f'union:{types[0].__name__}'):
+                try:
                     return TypeDef.load(types[0], plain)
-            except ValidationError:
-                return _try_types(types[1:])
+                except ValidationError:
+                    return _try_types(types[1:])
 
         return _try_types(self.inner_types)
 
@@ -383,11 +386,11 @@ class UnionDef(TypeDef):
         def _try_types(types):
             if not types:
                 raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
-            try:
-                with ctx.match(f'union:{types[0].__name__}'):
+            with ctx.match(f'union:{types[0].__name__}'):
+                try:
                     return TypeDef.dump(types[0], obj)
-            except ValidationError:
-                return _try_types(types[1:])
+                except ValidationError:
+                    return _try_types(types[1:])
 
         return _try_types(self.inner_types)
 
@@ -397,7 +400,7 @@ class PrimitiveDef(TypeDef):
 
     @classmethod
     def new(cls, type_):
-        if type_ in cls.primitive_types:
+        if inspect.isclass(type_) and issubclass(type_, cls.primitive_types):
             return cls(type_)
         return None
 

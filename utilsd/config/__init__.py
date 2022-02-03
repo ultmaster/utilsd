@@ -1,11 +1,7 @@
-from dataclasses import dataclass
-
 from .builtin import RuntimeConfig
 from .exception import ValidationError
-from .python import PythonConfig, RegistryConfig, ClassConfig, SubclassConfig
-from .registry import Registry
-
-configclass = dataclass(init=False)
+from .python import PythonConfig, configclass
+from .registry import Registry, RegistryConfig, ClassConfig, SubclassConfig
 
 
 __all__ = ['ClassConfig', 'PythonConfig', 'RuntimeConfig', 'Registry',
