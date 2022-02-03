@@ -3,8 +3,8 @@ Convert to / from a plain-type python object to a complex type,
 with type-checking/conversion based on type annotations.
 """
 
+import copy
 import dataclasses
-import functools
 import os
 from contextlib import contextmanager
 from enum import Enum
@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional, Type, TypeVar, Generic, Union, List, Tup
 
 import typeguard
 
+from .cli_parser import CliContext
 from .exception import ValidationError
 from .registry import ClassConfig, Registry, RegistryConfig, dataclass_from_class
 
@@ -24,11 +25,16 @@ class TypeDefRegistry(metaclass=Registry, name='type_def'):
 
 
 class ParseContext:
-    """Necessary information to generate accurate error message."""
+    """Necessary information to:
 
-    def __init__(self):
-        self.path: List[str] = []
+    1. generate accurate error message.
+    2. generate cli parser.
+    """
+
+    def __init__(self, cli_context: Optional[CliContext] = None):
+        self.path: List[Union[int, str]] = []
         self.matches: List[List[str]] = [[]]
+        self.cli_context = cli_context
 
     @contextmanager
     def onto(self, name):
@@ -54,12 +60,24 @@ class ParseContext:
         finally:
             self.matches[-1].pop()
 
+    def mark_cli_anchor_point(self, type_: Type) -> None:
+        """Mark an anchor point so that the cli context knows.
+        This is used to simplify code.
+        See the implementation for how to use it.
+        """
+        name = self.current_path
+        if not name or any(cha in name for cha in '():'):
+            # special names like '(key)xxx' cannot be added to parser
+            return
+        if self.cli_context is not None:
+            self.cli_context.add_argument(name, type_)
+
     @property
     def message(self) -> Optional[Tuple[str]]:
         if not self.path:
             return None
         return (
-            ' -> '.join(self.path),
+            ' -> '.join(map(str, self.path)),
             ' -> '.join(self.matches[-1]) if self.matches[-1] else 'empty',
         )
 
@@ -67,7 +85,18 @@ class ParseContext:
     def current_name(self) -> str:
         if not self.path:
             return '<unnamed>'
+        if isinstance(self.path[-1], int):
+            return 'index:' + str(self.path[-1])
         return self.path[-1]
+
+    @property
+    def current_path(self) -> str:
+        """The "path", separated with ".".
+        e.g., runtime.prep.seed
+        """
+        if not self.path:
+            return ''
+        return '.'.join(map(str, self.path))
 
 
 class TypeDef(Generic[T]):
@@ -117,7 +146,7 @@ class TypeDef(Generic[T]):
                 try:
                     with ctx.match(def_name):
                         return t.to_plain(obj, ctx)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, ImportError):
                     # add message for location here
                     err_message = 'Object can not be dumped.'
                     if ctx.message:
@@ -142,7 +171,7 @@ class TypeDef(Generic[T]):
                         converted = t.from_plain(payload, ctx)
                         t.validate(ctx.current_name, converted)
                         return converted
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, ImportError):
                     err_message = 'Object can not be loaded.'
                     if ctx.message:
                         err_message += ' Cause:\n  Parsing: ' + \
@@ -197,11 +226,13 @@ class PathDef(TypeDef):
         return None
 
     def from_plain(self, plain, ctx):
-        return Path(plain)
+        path = Path(plain)
+        ctx.mark_cli_anchor_point(str)
+        return path
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, self.pathlike):
-            raise ValueError(f'Expected a tuple, found {type(obj)}: {obj}')
+            raise TypeError(f'Expected a tuple, found {type(obj)}: {obj}')
         return str(obj)
 
 
@@ -219,19 +250,20 @@ class ListDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, list):
-            raise ValueError(f'Expected a list, found {type(plain)}: {plain}')
+            raise TypeError(f'Expected a list, found {type(plain)}: {plain}')
         result = []
         for i, value in enumerate(plain):
-            with ctx.onto(f'index:{i}'):
+            with ctx.onto(i):
                 result.append(TypeDef.load(self.inner_type, value))
+        ctx.mark_cli_anchor_point(list)
         return result
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, list):
-            raise ValueError(f'Expected a list, found {type(obj)}: {obj}')
+            raise TypeError(f'Expected a list, found {type(obj)}: {obj}')
         result = []
         for i, value in enumerate(obj):
-            with ctx.onto(f'index:{i}'):
+            with ctx.onto(i):
                 result.append(TypeDef.dump(self.inner_type, value))
         return result
 
@@ -250,19 +282,20 @@ class TupleDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, (list, tuple)):
-            raise ValueError(f'Expected a list or a tuple, found {type(plain)}: {plain}')
+            raise TypeError(f'Expected a list or a tuple, found {type(plain)}: {plain}')
         result = []
         for i, value in enumerate(plain):
-            with ctx.onto(f'index:{i}'):
+            with ctx.onto(i):
                 result.append(TypeDef.load(self.inner_type, value))
+        ctx.mark_cli_anchor_point(list)
         return tuple(result)
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, tuple):
-            raise ValueError(f'Expected a tuple, found {type(obj)}: {obj}')
+            raise TypeError(f'Expected a tuple, found {type(obj)}: {obj}')
         result = []
         for i, value in enumerate(obj):
-            with ctx.onto(f'index:{i}'):
+            with ctx.onto(i):
                 result.append(TypeDef.dump(self.inner_type, value))
         return tuple(result)
 
@@ -282,21 +315,23 @@ class DictDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, dict):
-            raise ValueError(f'Expected a dict, found {type(plain)}: {plain}')
+            raise TypeError(f'Expected a dict, found {type(plain)}: {plain}')
         result = {}
         for key, value in plain.items():
-            with ctx.onto(f'key:{key}'):
+            with ctx.onto(f'(key){key}'):
                 key = TypeDef.load(self.key_type, key)
             with ctx.onto(str(key)):
                 value = TypeDef.load(self.value_type, value)
             result[key] = value
+        ctx.mark_cli_anchor_point(dict)
+        return result
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, dict):
-            raise ValueError(f'Expected a dict, found {type(obj)}: {obj}')
+            raise TypeError(f'Expected a dict, found {type(obj)}: {obj}')
         result = {}
         for key, value in obj.items():
-            with ctx.onto(f'key:{key}'):
+            with ctx.onto(f'(key){key}'):
                 key = TypeDef.dump(self.key_type, key)
             with ctx.onto(str(key)):
                 value = TypeDef.dump(self.value_type, value)
@@ -312,18 +347,20 @@ class EnumDef(TypeDef):
         return None
 
     def from_plain(self, plain, ctx):
-        return self.type(plain)
+        result = self.type(plain)
+        ctx.mark_cli_anchor_point(self.type)
+        return result
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, self.type):
-            raise ValueError(f'Expected a enum ({self.type}), found {obj}')
+            raise TypeError(f'Expected a enum ({self.type}), found {obj}')
         return obj.value
 
 
 class UnionDef(TypeDef):
     @classmethod
     def new(cls, type_):
-        if getattr(type_, '__original__', None) == Union:
+        if getattr(type_, '__origin__', None) == Union:
             self = cls(type_)
             self.inner_types = list(type_.__args__)
         return None
@@ -333,7 +370,7 @@ class UnionDef(TypeDef):
         # until exhausted
         def _try_types(types):
             if not types:
-                raise ValueError(f'Possible types from union {self.inner_types} is exhausted.')
+                raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
             try:
                 with ctx.match(f'union:{types[0].__name__}'):
                     return TypeDef.load(types[0], plain)
@@ -345,7 +382,7 @@ class UnionDef(TypeDef):
     def to_plain(self, obj, ctx):
         def _try_types(types):
             if not types:
-                raise ValueError(f'Possible types from union {self.inner_types} is exhausted.')
+                raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
             try:
                 with ctx.match(f'union:{types[0].__name__}'):
                     return TypeDef.dump(types[0], obj)
@@ -364,24 +401,27 @@ class PrimitiveDef(TypeDef):
             return cls(type_)
         return None
 
-    def from_plain(self, plain):
+    def from_plain(self, plain, ctx):
         # support implicit conversion here
         if not isinstance(plain, self.primitive_types):
             raise ValueError(f'Cannot implicitly cast a variable with type {type(plain)}'
                              f' to {self.primitive_types}: {plain}')
         if issubclass(self.type, float):
-            return float(plain)
-        if issubclass(self.type, (int, bool)):
+            result = float(plain)
+        elif issubclass(self.type, (int, bool)):
             # check converting to int is not numerically equal
             # to avoid mistakenly converting float to int
             if int(plain) != plain:
                 raise ValueError(f'Cannot implicitly cast float {plain} to int or bool')
-            return int(plain)
-        return self.type(plain)
+            result = self.type(plain)
+        else:
+            result = self.type(plain)
+        ctx.mark_cli_anchor_point(self.type)
+        return result
 
-    def to_plain(self, obj):
+    def to_plain(self, obj, ctx):
         if not isinstance(obj, self.type):
-            raise ValueError(f'Expected {self.type}, found {obj} (type: {type(obj)})')
+            raise TypeError(f'Expected {self.type}, found {obj} (type: {type(obj)})')
         return obj
 
 
@@ -395,6 +435,7 @@ class DataclassDef(TypeDef):
 
     @staticmethod
     def _is_missing(obj: Any) -> bool:
+        # no default value
         return isinstance(obj, type(dataclasses.MISSING))
 
     def validate(self, converted, ctx):
@@ -420,36 +461,63 @@ class DataclassDef(TypeDef):
     def from_plain(self, plain, ctx, type_=None):
         if type_ is None:
             type_ = self.type
-        if not isinstance(plain, dict):
-            raise ValueError(f'Expect a dict, but found {type(plain)}: {plain}')
-        # the content with name `_meta` is ignored
-        # it is reserved for writing comments
-        _meta = plain.pop('_meta', None)
-        kwargs = {}
-        for field in dataclasses.fields(type_):
-            # get the values with content, otherwise default
-            value = plain.pop(field.name, field.default)
-            # if no default value exists
-            if self._is_missing(value):
-                # throw error early
-                raise ValueError('Expected value for `{field}`, but it is not set')
-            with ctx.onto(field.name):
-                value = TypeDef.load(field.type, value)
-            kwargs[field.name] = value
-        if plain:
-            fields = ', '.join(plain.keys())
-            raise ValueError(f'{type_.__name__}: Unrecognized fields {fields}')
+        if not isinstance(plain, dict) and not dataclasses.is_dataclass(plain):
+            raise TypeError(f'Expect a dict or dataclass, but found {type(plain)}: {plain}')
 
-        # creating dataclass
-        inst = type_(**kwargs)
-        inst._meta = _meta
+        if dataclasses.is_dataclass(plain):
+            # already done, no further creation is needed
+            # only transform the inner fields here
+            # NOTE: the transform is done "in-place"
+            if not isinstance(plain, type_):
+                raise TypeError(f'Expect a dataclass of type {type_}, but found {type(plain)}: {plain}')
+
+            for field in dataclasses.fields(type_):
+                with ctx.onto(field.name):
+                    # retrieve & transform & update
+                    value = getattr(plain, field.name)
+                    value = TypeDef.load(field.type, value)
+                    setattr(plain, field.name, value)
+
+            inst = plain
+
+        else:
+            # copy the raw object to prevent unexpected modification
+            plain = copy.copy(plain)
+
+            # the content with name `_meta` is ignored
+            # it is reserved for writing comments
+            _meta = plain.pop('_meta', None)
+            kwargs = {}
+            for field in dataclasses.fields(type_):
+                # get the values with content, otherwise default
+                value = plain.pop(field.name, field.default)
+                # if no default value exists
+                if self._is_missing(value):
+                    # throw error early
+                    raise ValueError('Expected value for `{field}`, but it is not set')
+                # Load should be done for both situations:
+                # 1. value is set
+                # 2. no value set, default value is used
+                # Case 2 is to handle situations where users use plain format to write a default value
+                with ctx.onto(field.name):
+                    value = TypeDef.load(field.type, value)
+                kwargs[field.name] = value
+            if plain:
+                fields = ', '.join(plain.keys())
+                raise ValueError(f'{type_.__name__}: Unrecognized fields {fields}')
+
+            # creating dataclass
+            inst = type_(**kwargs)
+            inst._meta = _meta
+
+        ctx.mark_cli_anchor_point(dict)
         return inst
 
     def to_plain(self, obj, ctx, type_=None, result=None):
         if type_ is None:
             type_ = self.type
         if not isinstance(obj, type_):
-            raise ValueError(f'Expected {type_}, found {obj} (type: {type(obj)})')
+            raise TypeError(f'Expected {type_}, found {obj} (type: {type(obj)})')
         if not result:
             result = {}
         for field in dataclasses.fields(obj):
@@ -463,6 +531,7 @@ class ClassConfigDef(DataclassDef):
     @classmethod
     def new(cls, type_):
         if getattr(type_, '__origin__', None) == ClassConfig:
+            # e.g., ClassConfig[nn.Conv2d]
             self = cls(type_)
             self.inner_type = dataclass_from_class(type_.__args__[0])
             return self
@@ -479,6 +548,7 @@ class RegistryConfigDef(DataclassDef):
     @classmethod
     def new(cls, type_):
         if getattr(type_, '__origin__', None) == RegistryConfig:
+            # e.g., ClassConfig[BACKBONES]
             self = cls(type_)
             # inner type is not available here
             self.registry = self.type.__args__[0]
@@ -487,8 +557,11 @@ class RegistryConfigDef(DataclassDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, dict) and 'type' in plain:
-            raise ValueError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
-        type_ = self.registry.get(plain['type'])
+            raise TypeError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
+        # copy the raw object to prevent unexpected modification
+        plain = copy.copy(plain)
+
+        type_ = self.registry.get(plain.pop('type'))
         dataclass = dataclass_from_class(type_)
         return super().from_plain(plain, ctx, type=dataclass)
 
@@ -502,6 +575,7 @@ class SubclassConfigDef(DataclassDef):
     @classmethod
     def new(cls, type_):
         if getattr(type_, '__origin__', None) == RegistryConfig:
+            # e.g., SubclassConfig[nn.Module]
             self = cls(type_)
             # inner type is not available here
             self.base_class = self.type.__args__[0]
@@ -510,6 +584,8 @@ class SubclassConfigDef(DataclassDef):
 
     @staticmethod
     def _find_class(cls_name: str, base_class: Type) -> Type:
+        """Find class with exact class name or attribute named ``alias``.
+        """
         def _iterate_subclass(base_class: Type) -> Iterable[Type]:
             for subclass in base_class.__subclasses__():
                 yield subclass
@@ -527,20 +603,29 @@ class SubclassConfigDef(DataclassDef):
                 subclass = getattr(module, identifier)
                 assert issubclass(subclass, base_class), f'{subclass} is not a subclass of {base_class}.'
                 return subclass
-        raise ValueError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
+        raise ImportError(f"{cls_name} is not found in {base_class}'s subclasses and cannot be directly imported.")
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, dict) and 'type' in plain:
-            raise ValueError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
-        type_ = self._find_class(plain['type'], self.base_class)
+            raise TypeError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
+        # copy the raw object to prevent unexpected modification
+        plain = copy.copy(plain)
+
+        type_ = self._find_class(plain.pop('type'), self.base_class)
         return super().from_plain(plain, ctx, type=type_)
 
     def to_plain(self, obj, ctx):
         # obj is a dataclass, type() is its original class
         class_type = obj.type()
-        import_path = class_type.__module__.__name__ + '.' + class_type.__class__.__name__
-        if self._find_class(import_path) != class_type:
-            raise ValueError(f'{class_type} cannot be created via importing from {import_path}')
+
+        # do the inverse of find class
+        if hasattr(class_type, 'alias'):
+            import_path = class_type.alias
+        else:
+            import_path = class_type.__module__.__name__ + '.' + class_type.__class__.__name__
+            if self._find_class(import_path) != class_type:
+                raise ImportError(f'{class_type} cannot be created via importing from {import_path}')
+
         return super().to_plain(obj, ctx, type=class_type, result={'type': import_path})
 
 
