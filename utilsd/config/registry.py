@@ -112,23 +112,31 @@ class Registry(type):
                 cls._module_dict.pop(k)
 
 
-class ClassConfig(Generic[T]):
+class DataclassType(type):
+    """To support subclass check for XXXConfig"""
+
+    def __subclasscheck__(self, subclass):
+        return dataclasses.is_dataclass(subclass)
+
+    def __instancecheck__(self, instance):
+        # TODO support check type here
+        return dataclasses.is_dataclass(instance)
+
+
+class ClassConfig(Generic[T], metaclass=DataclassType):
     """Dataclass based on ``__init__`` of one single class."""
-    pass
 
 
-class RegistryConfig(Generic[T]):
+class RegistryConfig(Generic[T], metaclass=DataclassType):
     """Dataclass based on ``__init__`` of classes in a specific registry.
     Special field ``type`` is used to specify the targeted class name.
     """
-    pass
 
 
-class SubclassConfig(Generic[T]):
+class SubclassConfig(Generic[T], metaclass=DataclassType):
     """Dataclass based on ``__init__`` of classes inheriting a specific base class.
     Special field ``type`` is used to specify the targeted class import path.
     """
-    pass
 
 
 def dataclass_from_class(cls):
@@ -150,7 +158,7 @@ def dataclass_from_class(cls):
 
         # TODO: fix type annotation for dependency injection
         if param.annotation == param.empty:
-            raise TypeError(f'Init parameter "{param}" of "{cls}" must have annotation.')
+            raise TypeError(f'Parameter of `__init__` "{param}" of "{cls}" must have annotation.')
         if param.default != param.empty:
             fields.append((param.name, param.annotation, param.default))
         else:

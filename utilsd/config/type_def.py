@@ -389,7 +389,8 @@ class UnionDef(TypeDef):
             with ctx.match('union:' + getattr(types[0], '__name__', str(types[0]))):
                 try:
                     return TypeDef.load(types[0], plain, ctx=ctx)
-                except ValidationError:
+                    # catch both validation error and unsupported type error
+                except (TypeError, ValidationError):
                     return _try_types(types[1:])
 
         return _try_types(self.inner_types)
@@ -401,7 +402,7 @@ class UnionDef(TypeDef):
             with ctx.match('union:' + getattr(types[0], '__name__', str(types[0]))):
                 try:
                     return TypeDef.dump(types[0], obj, ctx=ctx)
-                except ValidationError:
+                except (TypeError, ValidationError):
                     return _try_types(types[1:])
 
         return _try_types(self.inner_types)
@@ -436,7 +437,7 @@ class PrimitiveDef(TypeDef):
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, self.type):
-            raise TypeError(f'Expected {self.type}, found {obj} (type: {type(obj)})')
+            raise TypeError(f'Expected {self.type}, found {obj} of type: {type(obj)}')
         return obj
 
 
@@ -531,8 +532,10 @@ class DataclassDef(TypeDef):
     def to_plain(self, obj, ctx, type_=None, result=None):
         if type_ is None:
             type_ = self.type
-        if not isinstance(obj, type_):
-            raise TypeError(f'Expected {type_}, found {obj} (type: {type(obj)})')
+            # if type is dynamically generated, it won't pass check
+            # so this check lives in if-branch
+            if not isinstance(obj, type_):
+                raise TypeError(f'Expected {type_}, found {obj} of type: {type(obj)}')
         if not result:
             result = {}
         for field in dataclasses.fields(obj):
@@ -553,10 +556,12 @@ class ClassConfigDef(DataclassDef):
         return None
 
     def from_plain(self, plain, ctx):
-        return super().from_plain(plain, ctx, type=self.inner_type)
+        return super().from_plain(plain, ctx, type_=self.inner_type)
 
     def to_plain(self, obj, ctx):
-        return super().to_plain(obj, ctx, type=self.inner_type)
+        if not dataclasses.is_dataclass(obj) or not hasattr(obj, 'type') or self.inner_type._type != obj.type():
+            raise TypeError(f'Expect a dataclass with type() equals {self.inner_type._type}, found {obj} of type {type(obj)}')
+        return super().to_plain(obj, ctx, type_=self.inner_type)
 
 
 class RegistryConfigDef(DataclassDef):
@@ -578,12 +583,14 @@ class RegistryConfigDef(DataclassDef):
 
         type_ = self.registry.get(plain.pop('type'))
         dataclass = dataclass_from_class(type_)
-        return super().from_plain(plain, ctx, type=dataclass)
+        return super().from_plain(plain, ctx, type_=dataclass)
 
     def to_plain(self, obj, ctx):
+        if not dataclasses.is_dataclass(obj) or not hasattr(obj, 'type'):
+            raise TypeError(f'Expect a dataclass with type(), found {obj} of type {type(obj)}')
         # obj is a dataclass, type() is its original class
         type_name = self.registry.inverse_get(obj.type())
-        return super().to_plain(obj, ctx, type=obj.type(), result={'type': type_name})
+        return super().to_plain(obj, ctx, type_=obj.type(), result={'type': type_name})
 
 
 class SubclassConfigDef(DataclassDef):
@@ -627,9 +634,12 @@ class SubclassConfigDef(DataclassDef):
         plain = copy.copy(plain)
 
         type_ = self._find_class(plain.pop('type'), self.base_class)
-        return super().from_plain(plain, ctx, type=type_)
+        return super().from_plain(plain, ctx, type_=type_)
 
     def to_plain(self, obj, ctx):
+        if not dataclasses.is_dataclass(obj) or not hasattr(obj, 'type'):
+            raise TypeError(f'Expect a dataclass with type(), found {obj} of type {type(obj)}')
+
         # obj is a dataclass, type() is its original class
         class_type = obj.type()
 
@@ -641,7 +651,7 @@ class SubclassConfigDef(DataclassDef):
             if self._find_class(import_path) != class_type:
                 raise ImportError(f'{class_type} cannot be created via importing from {import_path}')
 
-        return super().to_plain(obj, ctx, type=class_type, result={'type': import_path})
+        return super().to_plain(obj, ctx, type_=class_type, result={'type': import_path})
 
 
 # register all the modules in this file

@@ -6,7 +6,7 @@ from enum import Enum
 
 import pytest
 
-from utilsd.config import ValidationError
+from utilsd.config import ClassConfig, RegistryConfig, SubclassConfig, ValidationError
 from utilsd.config.type_def import TypeDef
 
 
@@ -184,6 +184,70 @@ def test_union():
     assert TypeDef.dump(typing.Union[pathlib.Path, None], None) == None
 
 
+def test_class_config():
+    class module:
+        def __init__(self, a, b, c=1):
+            pass
+
+    with pytest.raises(TypeError, match='must have annotation'):
+        TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2})
+
+    class module:
+        def __init__(self, a: int, b: int, c: int = 1):
+            self._a = a
+            self._b = b
+
+    assert TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2}).a == 1
+    assert TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2}).type() == module
+    assert TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2}).build()._a == 1
+
+    result = TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2})
+    assert isinstance(result, ClassConfig)
+    assert issubclass(type(result), ClassConfig)
+
+    assert TypeDef.dump(ClassConfig[module], result) == {'a': 1, 'b': 2, 'c': 1}
+
+    @dataclass
+    class FakeDataclass:
+        a: int = 1
+        b: int = 2
+
+    with pytest.raises(ValidationError, match='Expect a dataclass with type'):
+        TypeDef.dump(ClassConfig[module], FakeDataclass())
+
+    class module:
+        def __init__(self, a: int, b: int, c: int = 1.5):
+            self._a = a
+            self._b = b
+
+    with pytest.raises(ValidationError, match='implicit'):
+        TypeDef.load(ClassConfig[module], {'a': 1, 'b': 2})
+
+    class submodule:
+        def __init__(self, a: int, b: int, c: int = 0):
+            self._a = a
+            self._b = b
+            self._c = c
+
+    class module:
+        def __init__(self, a: submodule, b: submodule):
+            pass
+
+    with pytest.raises(ValidationError, match='No hook found'):
+        TypeDef.load(ClassConfig[module], {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}})
+
+    class module:
+        def __init__(self, a: typing.Union[submodule, ClassConfig[submodule]],
+                     b: ClassConfig[submodule]):
+            self.a = a if isinstance(a, submodule) else a.build()
+            self.b = b.build()
+
+    assert TypeDef.load(ClassConfig[module],
+                        {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).b.c == 5
+    assert TypeDef.load(ClassConfig[module],
+                        {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).build().b._c == 5
+
+
 test_path()
 test_optional()
 test_any()
@@ -195,3 +259,4 @@ test_dict()
 test_enum()
 test_dataclass()
 test_union()
+test_class_config()
