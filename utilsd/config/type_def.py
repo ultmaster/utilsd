@@ -129,6 +129,7 @@ class TypeDef(Generic[T]):
 
     def validate(self, converted: T, ctx: ParseContext) -> None:
         # when something goes wrong, check_type raises TypeError
+        # however, in most cases, error throws earlier than this
         typeguard.check_type(f'{converted} ({ctx.current_name})', converted, self.type)
 
     @classmethod
@@ -211,14 +212,16 @@ class OptionalDef(TypeDef):
     def new(cls, type_):
         self = cls(type_)
         if str(type_).startswith('typing.Optional['):
-            self.inner_type = type.__args__[0]
+            self.inner_type = type_.__args__[0]
         elif getattr(type_, '__origin__', None) == Union and type_.__args__[1] == type(None):
-            self.inner_type = type.__args__[0]
+            self.inner_type = type_.__args__[0]
         else:
             return None
         return self
 
     def from_plain(self, plain, ctx):
+        if plain is None:
+            return None
         return TypeDef.load(self.inner_type, plain, ctx=ctx)
 
     def to_plain(self, obj, ctx):
@@ -382,8 +385,8 @@ class UnionDef(TypeDef):
         # until exhausted
         def _try_types(types):
             if not types:
-                raise TypeError(f'All possible types from union {self.inner_types} is exhausted.')
-            with ctx.match(f'union:{types[0].__name__}'):
+                raise TypeError(f'All possible types from union {self.inner_types} are exhausted.')
+            with ctx.match('union:' + getattr(types[0], '__name__', str(types[0]))):
                 try:
                     return TypeDef.load(types[0], plain, ctx=ctx)
                 except ValidationError:
@@ -394,8 +397,8 @@ class UnionDef(TypeDef):
     def to_plain(self, obj, ctx):
         def _try_types(types):
             if not types:
-                raise TypeError(f'All possible types from union {self.inner_types} is exhausted.')
-            with ctx.match(f'union:{types[0].__name__}'):
+                raise TypeError(f'All possible types from union {self.inner_types} are exhausted.')
+            with ctx.match('union:' + getattr(types[0], '__name__', str(types[0]))):
                 try:
                     return TypeDef.dump(types[0], obj, ctx=ctx)
                 except ValidationError:
@@ -452,9 +455,9 @@ class DataclassDef(TypeDef):
 
     def validate(self, converted, ctx):
         for field in dataclasses.fields(converted):
-            typeguard.check_type(f'{ctx.current_name} -> {field.name}',
-                                 getattr(converted, field.name),
-                                 field.type)
+            value = getattr(converted, field.name)
+            typeguard.check_type(f'{value} ({ctx.current_name} -> {field.name})',
+                                 value, field.type)
 
         # if dataclass has a post validation
         if hasattr(converted, 'post_validate'):
@@ -506,7 +509,7 @@ class DataclassDef(TypeDef):
                 # if no default value exists
                 if self._is_missing(value):
                     # throw error early
-                    raise ValueError('Expected value for `{field}`, but it is not set')
+                    raise ValueError(f'`{field}` is expected, but it is not set')
                 # Load should be done for both situations:
                 # 1. value is set
                 # 2. no value set, default value is used
