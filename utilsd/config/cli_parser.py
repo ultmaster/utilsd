@@ -28,6 +28,16 @@ def infer_type(t):
     return str2obj
 
 
+metavars = {
+    int: 'INTEGER',
+    str: 'STRING',
+    float: 'FLOAT',
+    bool: 'BOOL',
+    list: 'JSON',
+    dict: 'JSON'
+}
+
+
 class CliContext:
     """Hold context to create an argument parser."""
 
@@ -48,15 +58,16 @@ class CliContext:
             shortcut = shortcuts.get(name, [])
 
             if issubclass(type_, Enum):
-                parser.add_argument('--' + name, *shortcut, dest=name, type=str,
+                parser.add_argument('--' + name, *shortcut, dest=name, type=str, metavar='STRING',
                                     default=SUPPRESS, choices=[e.value for e in type_])
             elif type_ in (int, str, float, bool, list, dict):
                 inferred_type = infer_type(type_)
                 if inferred_type == str2bool:
-                    parser.add_argument('--' + name, type=inferred_type, default=SUPPRESS)
+                    parser.add_argument('--' + name, type=inferred_type, metavar='BOOL', default=SUPPRESS)
                     if shortcut:
                         parser.add_argument(*shortcut, action='store_true', dest=name)
                 else:
-                    parser.add_argument('--' + name, *shortcut, type=inferred_type, default=SUPPRESS)
+                    parser.add_argument('--' + name, *shortcut, metavar=metavars[type_],
+                                        type=inferred_type, default=SUPPRESS)
             else:
                 raise TypeError(f'Unsupported type to add argument: {type_}')

@@ -105,7 +105,7 @@ def _fromcli(cls: T, *, shortcuts=None, allow_rest=False, receive_nni=False):
     cli_context = CliContext()
 
     # first-pass
-    TypeDef.load(cls, default_config, ParseContext(cli_context))
+    TypeDef.load(cls, default_config.asdict(), ParseContext(cli_context))
 
     cli_context.build_parser(parser, shortcuts)
     parser.add_argument(
@@ -122,7 +122,8 @@ def _fromcli(cls: T, *, shortcuts=None, allow_rest=False, receive_nni=False):
         nni_params = nni.get_next_parameter() or {}
         default_config.merge_from_dict(nni_params)
 
-    configs = cls(**default_config)
+    # second-pass
+    configs = TypeDef.load(cls, default_config.asdict())
 
     if not allow_rest:
         if rest:
@@ -139,26 +140,6 @@ class PythonConfig:
     """
 
     def __init__(self):
+        super().__init__()
         warnings.warn('PythonConfig is deprecated and will be removed in future releases. '
                       'Please use @configclass instead.', category=DeprecationWarning)
-
-    def asdict(self) -> Dict[str, Any]:
-        return _asdict(self)
-
-    def meta(self) -> dict:
-        return _meta(self)
-
-    def post_validate(self) -> Union[bool, Tuple[bool, str]]:
-        return True
-
-    @classmethod
-    def fromfile(cls, filename, **kwargs):
-        return _fromfile(cls, filename, **kwargs)
-
-    @classmethod
-    def fromcli(cls, *,
-                shortcuts=None, allow_rest=False, receive_nni=False,
-                respect_config=True):
-        if not respect_config:
-            raise ValueError('`respect_config=False` is no longer supported.')
-        return _fromcli(cls, shortcuts, allow_rest, receive_nni)

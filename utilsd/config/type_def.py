@@ -19,7 +19,7 @@ import typeguard
 
 from .cli_parser import CliContext
 from .exception import ValidationError
-from .registry import (ClassConfig, Registry, RegistryConfig,
+from .registry import (ClassConfig, Registry, RegistryConfig, SubclassConfig,
                        dataclass_from_class)
 
 T = TypeVar('T')
@@ -596,7 +596,7 @@ class RegistryConfigDef(DataclassDef):
 class SubclassConfigDef(DataclassDef):
     @classmethod
     def new(cls, type_):
-        if getattr(type_, '__origin__', None) == RegistryConfig:
+        if getattr(type_, '__origin__', None) == SubclassConfig:
             # e.g., SubclassConfig[nn.Module]
             self = cls(type_)
             # inner type is not available here
@@ -634,7 +634,8 @@ class SubclassConfigDef(DataclassDef):
         plain = copy.copy(plain)
 
         type_ = self._find_class(plain.pop('type'), self.base_class)
-        return super().from_plain(plain, ctx, type_=type_)
+        dataclass = dataclass_from_class(type_)
+        return super().from_plain(plain, ctx, type_=dataclass)
 
     def to_plain(self, obj, ctx):
         if not dataclasses.is_dataclass(obj) or not hasattr(obj, 'type'):

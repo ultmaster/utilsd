@@ -59,7 +59,7 @@ class Registry(type):
         raise KeyError(f'{key} not found in {cls}')
 
     def inverse_get(cls, value):
-        keys = [k for k, v in cls._module if v == value]
+        keys = [k for k, v in cls._module_dict.items() if v == value]
         if len(keys) != 1:
             raise ValueError(f'{value} needs to appear exactly once in {cls}')
         return keys[0]
