@@ -10,13 +10,17 @@ import os
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path, PosixPath
-from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Generic, Union, List, Tuple, Iterable
+from typing import (
+    Any, Dict, Generic, Iterable, List, Optional, Tuple, Type,
+    TypeVar, Union
+)
 
 import typeguard
 
 from .cli_parser import CliContext
 from .exception import ValidationError
-from .registry import ClassConfig, Registry, RegistryConfig, dataclass_from_class
+from .registry import (ClassConfig, Registry, RegistryConfig,
+                       dataclass_from_class)
 
 T = TypeVar('T')
 
@@ -76,7 +80,8 @@ class ParseContext:
     @property
     def message(self) -> Optional[Tuple[str]]:
         return (
-            ' -> '.join(map(str, self.path)) if self.path else '<root>',
+            ' -> '.join(map(lambda x: f'index:{x}' if isinstance(x, int) else x, self.path)) \
+                if self.path else '<root>',
             ' -> '.join(self.matches[-1]) if self.matches[-1] else 'empty',
         )
 
@@ -96,6 +101,9 @@ class ParseContext:
         if not self.path:
             return ''
         return '.'.join(map(str, self.path))
+
+    def __repr__(self):
+        return f'ParseContext(path={self.path}, matches={self.matches})'
 
 
 class TypeDef(Generic[T]):
@@ -235,7 +243,7 @@ class PathDef(TypeDef):
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, self.pathlike):
-            raise TypeError(f'Expected a tuple, found {type(obj)}: {obj}')
+            raise TypeError(f'Expect a tuple, found {type(obj)}: {obj}')
         return str(obj)
 
 
@@ -253,21 +261,21 @@ class ListDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, list):
-            raise TypeError(f'Expected a list, found {type(plain)}: {plain}')
+            raise TypeError(f'Expect a list, found {type(plain)}: {plain}')
         result = []
         for i, value in enumerate(plain):
             with ctx.onto(i):
-                result.append(TypeDef.load(self.inner_type, value))
+                result.append(TypeDef.load(self.inner_type, value, ctx=ctx))
         ctx.mark_cli_anchor_point(list)
         return result
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, list):
-            raise TypeError(f'Expected a list, found {type(obj)}: {obj}')
+            raise TypeError(f'Expect a list, found {type(obj)}: {obj}')
         result = []
         for i, value in enumerate(obj):
             with ctx.onto(i):
-                result.append(TypeDef.dump(self.inner_type, value))
+                result.append(TypeDef.dump(self.inner_type, value, ctx=ctx))
         return result
 
 
@@ -285,21 +293,21 @@ class TupleDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, (list, tuple)):
-            raise TypeError(f'Expected a list or a tuple, found {type(plain)}: {plain}')
+            raise TypeError(f'Expect a list or a tuple, found {type(plain)}: {plain}')
         result = []
-        for i, value in enumerate(plain):
+        for i, (type_, value) in enumerate(zip(self.inner_types, plain)):
             with ctx.onto(i):
-                result.append(TypeDef.load(self.inner_type, value))
+                result.append(TypeDef.load(type_, value, ctx=ctx))
         ctx.mark_cli_anchor_point(list)
         return tuple(result)
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, tuple):
-            raise TypeError(f'Expected a tuple, found {type(obj)}: {obj}')
+            raise TypeError(f'Expect a tuple, found {type(obj)}: {obj}')
         result = []
-        for i, value in enumerate(obj):
+        for i, (type_, value) in enumerate(zip(self.inner_types, obj)):
             with ctx.onto(i):
-                result.append(TypeDef.dump(self.inner_type, value))
+                result.append(TypeDef.dump(type_, value, ctx=ctx))
         return tuple(result)
 
 
@@ -318,26 +326,26 @@ class DictDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if not isinstance(plain, dict):
-            raise TypeError(f'Expected a dict, found {type(plain)}: {plain}')
+            raise TypeError(f'Expect a dict, found {type(plain)}: {plain}')
         result = {}
         for key, value in plain.items():
             with ctx.onto(f'(key){key}'):
-                key = TypeDef.load(self.key_type, key)
+                key = TypeDef.load(self.key_type, key, ctx=ctx)
             with ctx.onto(str(key)):
-                value = TypeDef.load(self.value_type, value)
+                value = TypeDef.load(self.value_type, value, ctx=ctx)
             result[key] = value
         ctx.mark_cli_anchor_point(dict)
         return result
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, dict):
-            raise TypeError(f'Expected a dict, found {type(obj)}: {obj}')
+            raise TypeError(f'Expect a dict, found {type(obj)}: {obj}')
         result = {}
         for key, value in obj.items():
             with ctx.onto(f'(key){key}'):
-                key = TypeDef.dump(self.key_type, key)
+                key = TypeDef.dump(self.key_type, key, ctx=ctx)
             with ctx.onto(str(key)):
-                value = TypeDef.dump(self.value_type, value)
+                value = TypeDef.dump(self.value_type, value, ctx=ctx)
             result[key] = value
         return result
 
@@ -356,7 +364,7 @@ class EnumDef(TypeDef):
 
     def to_plain(self, obj, ctx):
         if not isinstance(obj, self.type):
-            raise TypeError(f'Expected a enum ({self.type}), found {obj}')
+            raise TypeError(f'Expect a enum ({self.type}), found {obj}')
         return obj.value
 
 
@@ -366,6 +374,7 @@ class UnionDef(TypeDef):
         if getattr(type_, '__origin__', None) == Union:
             self = cls(type_)
             self.inner_types = list(type_.__args__)
+            return self
         return None
 
     def from_plain(self, plain, ctx):
@@ -373,10 +382,10 @@ class UnionDef(TypeDef):
         # until exhausted
         def _try_types(types):
             if not types:
-                raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
+                raise TypeError(f'All possible types from union {self.inner_types} is exhausted.')
             with ctx.match(f'union:{types[0].__name__}'):
                 try:
-                    return TypeDef.load(types[0], plain)
+                    return TypeDef.load(types[0], plain, ctx=ctx)
                 except ValidationError:
                     return _try_types(types[1:])
 
@@ -385,10 +394,10 @@ class UnionDef(TypeDef):
     def to_plain(self, obj, ctx):
         def _try_types(types):
             if not types:
-                raise TypeError(f'Possible types from union {self.inner_types} is exhausted.')
+                raise TypeError(f'All possible types from union {self.inner_types} is exhausted.')
             with ctx.match(f'union:{types[0].__name__}'):
                 try:
-                    return TypeDef.dump(types[0], obj)
+                    return TypeDef.dump(types[0], obj, ctx=ctx)
                 except ValidationError:
                     return _try_types(types[1:])
 
@@ -414,7 +423,7 @@ class PrimitiveDef(TypeDef):
         elif issubclass(self.type, (int, bool)):
             # check converting to int is not numerically equal
             # to avoid mistakenly converting float to int
-            if int(plain) != plain:
+            if isinstance(plain, float) and int(plain) != plain:
                 raise ValueError(f'Cannot implicitly cast float {plain} to int or bool')
             result = self.type(plain)
         else:
@@ -478,7 +487,7 @@ class DataclassDef(TypeDef):
                 with ctx.onto(field.name):
                     # retrieve & transform & update
                     value = getattr(plain, field.name)
-                    value = TypeDef.load(field.type, value)
+                    value = TypeDef.load(field.type, value, ctx=ctx)
                     setattr(plain, field.name, value)
 
             inst = plain
@@ -503,7 +512,7 @@ class DataclassDef(TypeDef):
                 # 2. no value set, default value is used
                 # Case 2 is to handle situations where users use plain format to write a default value
                 with ctx.onto(field.name):
-                    value = TypeDef.load(field.type, value)
+                    value = TypeDef.load(field.type, value, ctx=ctx)
                 kwargs[field.name] = value
             if plain:
                 fields = ', '.join(plain.keys())
@@ -526,7 +535,7 @@ class DataclassDef(TypeDef):
         for field in dataclasses.fields(obj):
             with ctx.onto(field.name):
                 value = getattr(obj, field.name)
-                result[field.name] = TypeDef.dump(field.type, value)
+                result[field.name] = TypeDef.dump(field.type, value, ctx=ctx)
         return result
 
 

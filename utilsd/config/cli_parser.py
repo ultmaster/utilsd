@@ -49,7 +49,7 @@ class CliContext:
 
             if issubclass(type_, Enum):
                 parser.add_argument('--' + name, *shortcut, dest=name, type=str,
-                                    default=SUPPRESS, choices=[e.value for e in type_s])
+                                    default=SUPPRESS, choices=[e.value for e in type_])
             elif type_ in (int, str, float, bool, list, dict):
                 inferred_type = infer_type(type_)
                 if inferred_type == str2bool:
