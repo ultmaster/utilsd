@@ -24,6 +24,8 @@ from .registry import (ClassConfig, Registry, RegistryConfig, SubclassConfig,
 
 T = TypeVar('T')
 
+primitive_types = (int, float, str, bool)
+
 
 class TypeDefRegistry(metaclass=Registry, name='type_def'):
     pass
@@ -221,6 +223,10 @@ class OptionalDef(TypeDef):
 
     def from_plain(self, plain, ctx):
         if plain is None:
+            # if inner type is one of primitives,
+            # add a marker for cli
+            if self.inner_type in primitive_types:
+                ctx.mark_cli_anchor_point(self.inner_type)
             return None
         return TypeDef.load(self.inner_type, plain, ctx=ctx)
 
@@ -409,19 +415,17 @@ class UnionDef(TypeDef):
 
 
 class PrimitiveDef(TypeDef):
-    primitive_types = (int, float, str, bool)
-
     @classmethod
     def new(cls, type_):
-        if inspect.isclass(type_) and issubclass(type_, cls.primitive_types):
+        if inspect.isclass(type_) and issubclass(type_, primitive_types):
             return cls(type_)
         return None
 
     def from_plain(self, plain, ctx):
         # support implicit conversion here
-        if not isinstance(plain, self.primitive_types):
+        if not isinstance(plain, primitive_types):
             raise ValueError(f'Cannot implicitly cast a variable with type {type(plain)}'
-                             f' to {self.primitive_types}: {plain}')
+                             f' to {primitive_types}: {plain}')
         if issubclass(self.type, float):
             result = float(plain)
         elif issubclass(self.type, (int, bool)):
