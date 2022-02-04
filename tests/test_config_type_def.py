@@ -6,7 +6,7 @@ from enum import Enum
 
 import pytest
 
-from utilsd.config import ClassConfig, RegistryConfig, SubclassConfig, ValidationError
+from utilsd.config import ClassConfig, ValidationError
 from utilsd.config.type_def import TypeDef
 
 
@@ -160,6 +160,19 @@ def test_dataclass():
     assert TypeDef.load(Foo, dict(a=1, b=2.0)).c.n == 2
     # it can be dumped now because transform is in-place
     assert TypeDef.dump(Foo, Foo(a=1, b=2.0)) == {'a': 1, 'b': 2.0, 'c': {'n': 2}}
+
+    @dataclass
+    class Foo:
+        a: int
+        b: float
+
+        def post_validate(self):
+            return self.a == self.b
+
+    with pytest.raises(ValidationError, match='validation failed'):
+        TypeDef.load(Foo, dict(a=1, b=2.0))
+
+    assert TypeDef.load(Foo, dict(a=1, b=1)).a == 1
 
 
 def test_union():

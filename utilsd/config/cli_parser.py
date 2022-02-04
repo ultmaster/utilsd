@@ -1,7 +1,7 @@
 import json
 from argparse import ArgumentParser, ArgumentTypeError, SUPPRESS
 from enum import Enum
-from typing import Dict, Type
+from typing import Dict, Type, List
 
 
 def str2bool(v):
@@ -51,23 +51,21 @@ class CliContext:
         self.visited[name] = type_
 
     def build_parser(self, parser: ArgumentParser,
-                     shortcuts: Dict[str, str]) -> None:
+                     shortcuts: Dict[str, List[str]]) -> None:
         """Modify the parser so that it can handle the names in "visited"."""
         for name in sorted(self.visited.keys()):
             type_ = self.visited[name]
             shortcut = shortcuts.get(name, [])
+
+            if not isinstance(shortcut, list):
+                raise TypeError(f'Shortcut of {name} is not found to be a list: {shortcut}')
 
             if issubclass(type_, Enum):
                 parser.add_argument('--' + name, *shortcut, dest=name, type=str, metavar='STRING',
                                     default=SUPPRESS, choices=[e.value for e in type_])
             elif type_ in (int, str, float, bool, list, dict):
                 inferred_type = infer_type(type_)
-                if inferred_type == str2bool:
-                    parser.add_argument('--' + name, type=inferred_type, metavar='BOOL', default=SUPPRESS)
-                    if shortcut:
-                        parser.add_argument(*shortcut, action='store_true', dest=name)
-                else:
-                    parser.add_argument('--' + name, *shortcut, metavar=metavars[type_],
-                                        type=inferred_type, default=SUPPRESS)
+                parser.add_argument('--' + name, *shortcut, metavar=metavars[type_],
+                                    type=inferred_type, default=SUPPRESS)
             else:
                 raise TypeError(f'Unsupported type to add argument: {type_}')

@@ -652,8 +652,8 @@ class SubclassConfigDef(DataclassDef):
         if hasattr(class_type, 'alias'):
             import_path = class_type.alias
         else:
-            import_path = class_type.__module__.__name__ + '.' + class_type.__class__.__name__
-            if self._find_class(import_path) != class_type:
+            import_path = class_type.__module__ + '.' + class_type.__name__
+            if self._find_class(import_path, self.base_class) != class_type:
                 raise ImportError(f'{class_type} cannot be created via importing from {import_path}')
 
         return super().to_plain(obj, ctx, type_=class_type, result={'type': import_path})

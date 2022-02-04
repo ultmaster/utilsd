@@ -7,7 +7,13 @@ import warnings
 from argparse import ArgumentParser, SUPPRESS
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, TypeVar, Tuple, Union, Protocol, Optional, List
+from typing import Any, Dict, TypeVar, Tuple, Union, Optional, List
+
+if True:  # prevent reordering by formatter
+    try:
+        from typing import Protocol
+    except ImportError:
+        from typing_extensions import Protocol
 
 from ..fileio.config import Config
 from .cli_parser import CliContext

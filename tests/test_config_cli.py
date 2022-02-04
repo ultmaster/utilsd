@@ -15,19 +15,19 @@ class SubFoo(BaseFoo):
 
 
 @configclass
-class Bar(PythonConfig):
+class Bar:
     n: int
 
 
 @configclass
-class Foo(PythonConfig):
+class Foo:
     a: int
     b: float
     c: Bar
 
 
 @configclass
-class CfgWithSubclass(PythonConfig):
+class CfgWithSubclass:
     n: SubclassConfig[BaseFoo]
     t: SubclassConfig[BaseBar]
 
@@ -37,15 +37,20 @@ class TEST(metaclass=Registry, name="test"):
 
 
 @TEST.register_module()
-class TestModule:
+class Module1:
     def __init__(self, a: int = 1, b: Optional[str] = None):
         self.a = a
         self.b = b
 
 
 @configclass
-class RegistryModuleConfig(PythonConfig):
+class RegistryModuleConfig:
     test: RegistryConfig[TEST]
+
+
+@configclass
+class ConfWithBool:
+    act: bool
 
 
 def test_parse_command_line():
@@ -56,6 +61,16 @@ def test_parse_command_line():
         assert Foo.fromcli().b == 3
     with patch('argparse._sys.argv', ['test.py', config_fp, '--c.n', '1']):
         assert Foo.fromcli().c.n == 1
+
+
+def test_cli_with_bool():
+    config_fp = os.path.join(os.path.dirname(__file__), 'assets/exp_config_bool.yml')
+    with patch('argparse._sys.argv', ['test.py', config_fp]):
+        assert ConfWithBool.fromcli().act == False
+    with patch('argparse._sys.argv', ['test.py', config_fp, '--act', 'true']):
+        assert ConfWithBool.fromcli().act == True
+    with patch('argparse._sys.argv', ['test.py', config_fp, '-a', 'true']):
+        assert ConfWithBool.fromcli(shortcuts={'act': ['-a']}).act == True
 
 
 def test_parse_command_line_dynamic():
@@ -85,4 +100,4 @@ def test_registry_config_command_line():
 
 
 if __name__ == '__main__':
-    test_registry_config_command_line()
+    test_cli_with_bool()

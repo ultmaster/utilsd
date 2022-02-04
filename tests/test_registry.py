@@ -92,6 +92,8 @@ def test_registry_config_complex():
         CfgRegistryDict,
         dict(m=dict(a={'type': 'Converter1', 'a': 1, 'b': 2}, b={'type': 'Converter2', 'a': 3, 'b': 4}))
     )
+    assert TypeDef.dump(CfgRegistryDict, config) == \
+        dict(m=dict(a={'type': 'Converter1', 'a': 1, 'b': 2}, b={'type': 'Converter2', 'a': 3, 'b': 4}))
     assert config.m['a'].type() == Converter1
     assert config.m['b'].type() == Converter2
     assert config.m['a'].a == 1
@@ -116,6 +118,11 @@ def test_subclass_config():
         n={'type': 'SubFoo'},
         t={'type': 'tests.assets.import_invisible.SubBar', 'a': 1}
     ))
+
+    assert TypeDef.dump(CfgWithSubclass, config) == dict(
+        n={'type': 'tests.test_registry.SubFoo'},
+        t={'type': 'tests.assets.import_invisible.SubBar', 'a': 1}
+    )
     assert isinstance(config.t.build(), BaseBar)
     assert isinstance(config.n.build(), SubFoo)
     assert config.t.build().a == 1
