@@ -32,13 +32,13 @@ Contents
 
 .. toctree::
    :caption: Tutorials
-   :maxdepth: 1
+   :maxdepth: 2
 
-   tutorials/config
+   tutorials/index
 
 .. toctree::
    :caption: References
-   :maxdepth: 1
+   :maxdepth: 2
 
    references
 
