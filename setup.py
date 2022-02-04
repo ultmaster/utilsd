@@ -47,7 +47,7 @@ setuptools.setup(
         'docs': [
             'sphinx',
             'nbsphinx',
-            'sphinx-material @ git+https://github.com/bashtage/sphinx-material.git',
+            'pydata-sphinx-theme',
             'ipython',
         ],
     },
