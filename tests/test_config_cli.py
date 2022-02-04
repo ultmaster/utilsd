@@ -1,8 +1,7 @@
 import os
 from typing import Optional
 
-import pytest
-from utilsd.config import PythonConfig, Registry, RegistryConfig, SubclassConfig, ValidationError, configclass
+from utilsd.config import PythonConfig, Registry, RegistryConfig, SubclassConfig, configclass
 from unittest.mock import patch
 from tests.assets.import_class import BaseBar
 
@@ -72,13 +71,17 @@ def test_registry_config_command_line():
     with patch('argparse._sys.argv', ['test.py', config_fp, '--test.a', '2']):
         config = RegistryModuleConfig.fromcli()
         assert config.test.a == 2
-    # config_fp = os.path.join(os.path.dirname(__file__), 'assets/registry2.yml')
-    # with patch('argparse._sys.argv', ['test.py', config_fp, '--help']):
-    #     config = RegistryModuleConfig.fromcli()
-        # assert config.test.b == 'test'
+
+    # test optional int, default = None
     with patch('argparse._sys.argv', ['test.py', config_fp, '--test.b', 'test']):
         config = RegistryModuleConfig.fromcli()
         assert config.test.b == 'test'
+
+    # test json
+    with patch('argparse._sys.argv', ['test.py', config_fp, '--test', '{"a": 42, "b": "abc"}']):
+        config = RegistryModuleConfig.fromcli()
+        assert config.test.a == 42
+        assert config.test.b == 'abc'
 
 
 if __name__ == '__main__':

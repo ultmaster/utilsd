@@ -5,7 +5,7 @@ The original PythonConfig is kept for compatibility purposes.
 
 import warnings
 from argparse import ArgumentParser, SUPPRESS
-from dataclasses import fields, is_dataclass, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, TypeVar, Tuple, Union, Protocol, Optional, List
 
@@ -39,6 +39,15 @@ class BaseConfig(Protocol):
         ...
 
     @classmethod
+    def fromdict(cls: T, data: Any) -> T:
+        """Create a config by parsing ``data``.
+
+        Args:
+            data (any): Data to parse. Should be a dict in most cases.
+        """
+        ...
+
+    @classmethod
     def fromcli(cls: T, *,
                 shortcuts: Optional[Dict[str, str]] = None,
                 allow_rest: bool = False,
@@ -66,18 +75,61 @@ class BaseConfig(Protocol):
 
 
 def configclass(cls: T) -> Union[T, BaseConfig]:
+    """
+    Make a class a config class.
+    The class should be written like a `dataclass <https://docs.python.org/3/library/dataclasses.html>`__,
+    and annotated with ``@configclass``. Then it can load content from YAML files or python dict.
+
+    Returns:
+        BaseConfig:
+            The annotated config class.
+
+    Examples:
+
+        To create a config class: ::
+
+            @configclass
+            class UserConf:
+                username: str
+                password: str
+                attempt: Optional[int] = None
+
+        To load from a file or content: ::
+
+            config = UserConf.fromfile('config.yml')
+            config = UserConf.fromdict({'username': 'john', 'password': 123})
+
+        To parse from commnad line: ::
+
+            config = UserConf.fromcli()
+
+        Then in command line, it accepts a file which is considered as "base config".
+        The base config should be load-able with ``UserConf.fromfile``.
+        Most of the fields in the config can be overridden with command line arguments. ::
+
+            $ python test.py config.yml --username "grace"
+
+        Use ``-h`` for help.
+
+            $ python test.py config.yml -h
+
+        It is essentially a dataclass, and thus all the methods that apply to dataclass similarly apply. ::
+
+            UserConf('john', '123', attempt=0)
+    """
     cls = dataclass(cls)
 
     # add four methods to match protocol
     cls.asdict = _asdict
     cls.meta = _meta
+    cls.fromdict = _fromdict
     cls.fromfile = _fromfile
     cls.fromcli = _fromcli
     return cls
 
 
 def _asdict(self):
-    return TypeDef.dump(self.__class__, self, ParseContext())
+    return TypeDef.dump(self.__class__, self)
 
 
 def _meta(self):
@@ -87,7 +139,12 @@ def _meta(self):
 @classmethod
 def _fromfile(cls, filename, **kwargs):
     config = Config.fromfile(filename, **kwargs)
-    return TypeDef.load(cls, config, ParseContext())
+    return TypeDef.load(cls, config)
+
+
+@classmethod
+def _fromdict(cls, data):
+    return TypeDef.load(cls, data)
 
 
 @classmethod
@@ -95,8 +152,14 @@ def _fromcli(cls: T, *, shortcuts=None, allow_rest=False, receive_nni=False):
     if shortcuts is None:
         shortcuts = {}
 
-    # FIXME verify help message
-    parser = ArgumentParser(add_help=False)
+    description = """Command line auto-generated with utilsd.config.
+A path to base config file (like JSON/YAML) needs to be specified first.
+Then some extra arguments to override the fields in the base config.
+Please note the type of arguments (always use `-h` for reference):
+`JSON` type means the field accepts a `JSON` for overriding.
+    """
+
+    parser = ArgumentParser(description=description, add_help=False)
     parser.add_argument('exp', help='Experiment YAML file')
     args, _ = parser.parse_known_args()
     default_config = Config.fromfile(args.exp)
