@@ -139,7 +139,7 @@ def _meta(self):
 @classmethod
 def _fromfile(cls, filename, **kwargs):
     config = Config.fromfile(filename, **kwargs)
-    return TypeDef.load(cls, config)
+    return TypeDef.load(cls, config.asdict())
 
 
 @classmethod
