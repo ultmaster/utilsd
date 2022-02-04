@@ -3,7 +3,7 @@ import inspect
 from typing import Optional, Type, Union, Generic, TypeVar, ClassVar
 
 
-__all__ = ['PythonConfig', 'ClassConfig', 'RegistryConfig', 'RegistryConfig']
+__all__ = ['ClassConfig', 'RegistryConfig', 'RegistryConfig']
 
 T = TypeVar('T')
 
