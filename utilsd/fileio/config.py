@@ -453,6 +453,9 @@ class Config:
 
         return text
 
+    def asdict(self):
+        return self._cfg_dict
+
     def __repr__(self):
         return f'Config (path: {self.filename}): {self._cfg_dict.__repr__()}'
 

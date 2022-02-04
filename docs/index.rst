@@ -31,17 +31,10 @@ Contents
 --------
 
 .. toctree::
-   :caption: Tutorials
-   :maxdepth: 1
+   :maxdepth: 2
 
-   tutorials/config
-
-.. toctree::
-   :caption: References
-   :maxdepth: 1
-
+   tutorials/index
    references
-
 
 Indices and tables
 ------------------

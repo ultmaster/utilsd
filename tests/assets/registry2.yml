@@ -1,4 +1,4 @@
 test:
-  type: TestModule
+  type: Module1
   a: 1
   b: null

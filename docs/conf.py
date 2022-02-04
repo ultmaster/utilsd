@@ -53,45 +53,32 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '.ipynb_checkpoints']
 
+# The master toctree document.
+master_doc = 'index'
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_material'
-
-html_sidebars = {
-    "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
-}
+html_theme = 'pydata_sphinx_theme'
 
 html_theme_options = {
-
-    # Set the name of the project to appear in the navigation.
-    'nav_title': 'utilsd',
-
     # Set you GA account ID to enable tracking
-    'google_analytics_account': 'G-4BJDV0VR74',
+    'google_analytics_id': 'G-4BJDV0VR74',
 
-    # Specify a base_url used to generate sitemap.xml. If not
-    # specified, then no sitemap will be built.
-    'base_url': 'https://utilsd.readthedocs.io/',
-
-    # Set the color and the accent color
-    'color_primary': 'indigo',
-    'color_accent': 'pink',
-
-    # Set the repo location to get a badge with stats
-    'repo_url': 'https://github.com/ultmaster/utilsd/',
-    'repo_name': 'utilsd',
-
-    # Visible levels of the global TOC; -1 means unlimited
-    'globaltoc_depth': 3,
-
-    'logo_icon': '&#xE869',
-
-    'version_dropdown': True,
-    'version_json': '_static/versions.json'
+    'icon_links': [
+        {
+            # Label for this link
+            'name': 'GitHub',
+            # URL where the link will redirect
+            'url': 'https://github.com/ultmaster/utilsd',  # required
+            # Icon class (if 'type': 'fontawesome'), or path to local image (if 'type': 'local')
+            'icon': 'fab fa-github-square',
+            # Whether icon should be a FontAwesome class, or a local file
+            'type': 'fontawesome',  # Default is fontawesome
+        }
+   ]
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

@@ -1,0 +1,11 @@
+optimizer:
+  opt_type: adam
+  learning_rate: 1e-3  # pyyaml loads it as a string, but it's okay because we have our converting
+  momentum: 0.9
+  weight_decay: 0
+  grad_clip: null
+  other_params:
+    eps: 1.0e-8  # converting doesn't help because the annotated type is any
+num_epochs: [10, 20]
+batch_size: 10
+fast_dev_run: true

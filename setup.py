@@ -39,13 +39,15 @@ setuptools.setup(
         'pyyaml>=5.4.1',
         'yapf>=0.31.0',
         'numpy<1.22;python_version<"3.8"',
+        'typing-extensions>=3.7;python_version<"3.8"',
+        'typeguard>=2.13',
     ],
     extras_require={
         'full': ['torch>=1.7.1'],
         'docs': [
             'sphinx',
             'nbsphinx',
-            'sphinx-material @ git+https://github.com/bashtage/sphinx-material.git',
+            'pydata-sphinx-theme',
             'ipython',
         ],
     },
