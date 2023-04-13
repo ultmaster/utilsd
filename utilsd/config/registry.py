@@ -139,7 +139,7 @@ class SubclassConfig(Generic[T], metaclass=DataclassType):
     """
 
 
-def dataclass_from_class(cls):
+def dataclass_from_class(cls, *, inherent_signature=True):
     """Create a configurable dataclass for a class
     based on its ``__init__`` signature.
     """
@@ -162,7 +162,8 @@ def dataclass_from_class(cls):
             raise TypeError(f'Use of positional params `*arg` in "{cls}" is prehibitted. Try to use `**kwargs` instead to avoid possible confusion.')
         if param.kind == param.VAR_KEYWORD:
             # Expand __init__ of the super classes for signitures
-            expand_super = True
+            if inherent_signature:
+                expand_super = True
             continue
 
         # TODO: fix type annotation for dependency injection
