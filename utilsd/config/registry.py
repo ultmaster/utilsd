@@ -142,7 +142,6 @@ class SubclassConfig(Generic[T], metaclass=DataclassType):
 def dataclass_from_class(cls):
     """Create a configurable dataclass for a class
     based on its ``__init__`` signature.
-    FIXME: Building dataclass from both the init_signature of the class, but also its super classes
     """
     class_name = cls.__name__ + 'Config'
     fields = [
