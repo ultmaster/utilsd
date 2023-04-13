@@ -40,7 +40,7 @@ setuptools.setup(
         'yapf>=0.31.0',
         'numpy<1.22;python_version<"3.8"',
         'typing-extensions>=3.7;python_version<"3.8"',
-        'typeguard>=2.13',
+        'typeguard>=2.13,<3.0',
     ],
     extras_require={
         'full': ['torch>=1.7.1'],
