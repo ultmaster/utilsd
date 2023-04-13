@@ -142,27 +142,69 @@ class SubclassConfig(Generic[T], metaclass=DataclassType):
 def dataclass_from_class(cls):
     """Create a configurable dataclass for a class
     based on its ``__init__`` signature.
+    FIXME: Building dataclass from both the init_signature of the class, but also its super classes
     """
     class_name = cls.__name__ + 'Config'
     fields = [
         ('_type', ClassVar[Type], cls),
     ]
+    non_default_fields = []
+    default_fields = []
     init_signature = inspect.signature(cls.__init__)
+    # Track presented param names. The same name may appear in different classes when **kwargs is passed.
+    existing_names = dict()
+    expand_super = False
     for idx, param in enumerate(init_signature.parameters.values()):
         if idx == 0:
             # skip self
             continue
-        if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-            # FIXME add support for args and kwargs later
+        if param.kind == param.VAR_POSITIONAL:
+            # Prohibit uncollected positional varibles
+            raise TypeError(f'Use of positional params `*arg` in "{cls}" is prehibitted. Try to use `**kwargs` instead to avoid possible confusion.')
+        if param.kind == param.VAR_KEYWORD:
+            # Expand __init__ of the super classes for signitures
+            expand_super = True
             continue
 
         # TODO: fix type annotation for dependency injection
         if param.annotation == param.empty:
             raise TypeError(f'Parameter of `__init__` "{param}" of "{cls}" must have annotation.')
+        existing_names[param.name] = (cls, param.annotation)
         if param.default != param.empty:
-            fields.append((param.name, param.annotation, param.default))
+            default_fields.append((param.name, param.annotation, param.default))
         else:
-            fields.append((param.name, param.annotation))
+            non_default_fields.append((param.name, param.annotation))
+    
+    # check the super classes of cls 
+    for scls in cls.mro()[1:]:
+        scls_signature = inspect.signature(scls.__init__)
+        for idx, param in enumerate(scls_signature.parameters.values()):
+            if idx == 0:
+                # skip self
+                continue
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                # mro has already contained all the super classes so we don't need to do expansion again.
+                continue
+            
+            if param.annotation == param.empty:
+                raise TypeError(f'Parameter of `__init__` "{param}" of the superclass "{scls}" of "{cls}" must have annotation.')
+            
+            if param.name in existing_names:
+                if existing_names[param.name][1] != param.annotation:
+                    raise TypeError(
+                        f'Inconsist annotations found for the same param for inherited classes:\n'
+                        f'\tParam name: {param.name}\n'
+                        f'\tAnnotation in {existing_names[param.name][0]}: {existing_names[param.name][1]}\n'
+                        f'\tAnnotation in {scls}: {param.annotation}'
+                    )
+            else:
+                if expand_super:
+                    if param.default != param.empty:
+                        default_fields.append((param.name, param.annotation, param.default))
+                    else:
+                        non_default_fields.append((param.name, param.annotation))
+
+    fields = fields + non_default_fields + default_fields
 
     def type_fn(self): return self._type
 
