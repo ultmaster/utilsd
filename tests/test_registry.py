@@ -3,6 +3,7 @@ from typing import Dict, Union
 import pytest
 from utilsd.config import ClassConfig, Registry, RegistryConfig, SubclassConfig, configclass
 from utilsd.config.type_def import TypeDef
+from utilsd.config.exception import ValidationError
 from tests.assets.import_class import BaseBar
 
 
@@ -145,3 +146,56 @@ def test_registry():
 
     Converters.register_module(module=Converter2)
     assert len(Converters) == 2
+
+
+class TestInhReg(metaclass=Registry, name='TestInh'):
+    pass
+
+
+@TestInhReg.register_module()
+class InhBase():
+    def __init__(self, a: int, b: int, **kwargs):
+        self.a = a
+        self.b = b
+        self.uncollected = kwargs
+        
+
+@TestInhReg.register_module(inherent=True)
+class InhChild1(InhBase):
+    def __init__(self, c: int, d: int, **kwargs):
+        super().__init__(**kwargs)
+        self.c = c
+        self.d = d
+
+
+@TestInhReg.register_module()
+class InhChild2(InhBase):
+    def __init__(self, c: int, d: int, **kwargs):
+        super().__init__(**kwargs)
+        self.c = c
+        self.d = d
+
+
+@configclass
+class InhRegCfg:
+    m: RegistryConfig[TestInhReg]
+
+
+def test_superclass_registry():
+    assert len(TestInhReg) == 3
+    assert "InhChild1" in TestInhReg
+    assert "InhChildNotDefined" not in TestInhReg
+
+    # when inherent is set True, the module will look back to its super class for areas
+    config = TypeDef.load(
+        InhRegCfg, dict(m=dict(type="InhChild1", a=1, b=2, c=3, d=4))
+    )
+    child1 = config.m.build()
+    assert child1.a == 1
+    assert child1.c == 3
+
+    with pytest.raises(ValidationError):
+        # when inherent is set False (default), all the keys must be specifed in the param list of __init__
+        config = TypeDef.load(
+            InhRegCfg, dict(m=dict(type="InhChild2", a=1, b=2, c=3, d=4))
+        )

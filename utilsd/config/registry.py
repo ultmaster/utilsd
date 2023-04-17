@@ -33,6 +33,7 @@ class Registry(type):
         cls = super().__new__(cls, clsname, bases, attrs)
         cls._name = name
         cls._module_dict = {}
+        cls._inherent_dict = {} # track whether a module should expand its superclass init parameters when specified with **kwargs
         return cls
 
     @property
@@ -47,7 +48,7 @@ class Registry(type):
         return len(cls._module_dict)
 
     def __contains__(cls, key):
-        return cls.get(key) is not None
+        return key in cls._module_dict
 
     def __repr__(cls):
         format_str = cls.__name__ + f'(name={cls._name}, items={cls._module_dict})'
@@ -57,14 +58,19 @@ class Registry(type):
         if key in cls._module_dict:
             return cls._module_dict[key]
         raise KeyError(f'{key} not found in {cls}')
-
+    
+    def get_module_with_inherent(cls, key):
+        if key in cls._module_dict:
+            return cls._module_dict[key], cls._inherent_dict[key]
+        raise KeyError(f'{key} not found in {cls}')
+        
     def inverse_get(cls, value):
         keys = [k for k, v in cls._module_dict.items() if v == value]
         if len(keys) != 1:
             raise ValueError(f'{value} needs to appear exactly once in {cls}')
         return keys[0]
 
-    def _register_module(cls, module_class, module_name=None, force=False):
+    def _register_module(cls, module_class, module_name=None, force=False, *, inherent=False):
         if not inspect.isclass(module_class):
             raise TypeError(f'module must be a class, but got {type(module_class)}')
 
@@ -76,8 +82,9 @@ class Registry(type):
             if not force and name in cls._module_dict:
                 raise KeyError(f'{name} is already registered in {cls.name}')
             cls._module_dict[name] = module_class
+            cls._inherent_dict[name] = inherent
 
-    def register_module(cls, name: Optional[str] = None, force: bool = False, module: Type = None):
+    def register_module(cls, name: Optional[str] = None, force: bool = False, module: Type = None, *, inherent=False):
         if not isinstance(force, bool):
             raise TypeError(f'force must be a boolean, but got {type(force)}')
 
@@ -89,12 +96,12 @@ class Registry(type):
 
         # use it as a normal method: x.register_module(module=SomeClass)
         if module is not None:
-            cls._register_module(module_class=module, module_name=name, force=force)
+            cls._register_module(module_class=module, module_name=name, force=force, inherent=inherent)
             return module
 
         # use it as a decorator: @x.register_module()
         def _register(reg_cls):
-            cls._register_module(module_class=reg_cls, module_name=name, force=force)
+            cls._register_module(module_class=reg_cls, module_name=name, force=force, inherent=inherent)
             return reg_cls
 
         return _register
@@ -139,7 +146,7 @@ class SubclassConfig(Generic[T], metaclass=DataclassType):
     """
 
 
-def dataclass_from_class(cls, *, inherent_signature=True):
+def dataclass_from_class(cls, *, inherent_signature=False):
     """Create a configurable dataclass for a class
     based on its ``__init__`` signature.
     """
@@ -158,8 +165,10 @@ def dataclass_from_class(cls, *, inherent_signature=True):
             # skip self
             continue
         if param.kind == param.VAR_POSITIONAL:
-            # Prohibit uncollected positional varibles
-            raise TypeError(f'Use of positional params `*arg` in "{cls}" is prehibitted. Try to use `**kwargs` instead to avoid possible confusion.')
+            if inherent_signature:
+                # Prohibit uncollected positional varibles
+                raise TypeError(f'Use of positional params `*arg` in "{cls}" is prehibitted. Try to use `**kwargs` instead to avoid possible confusion.')
+            continue
         if param.kind == param.VAR_KEYWORD:
             # Expand __init__ of the super classes for signitures
             if inherent_signature:
