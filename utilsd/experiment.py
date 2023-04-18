@@ -15,6 +15,7 @@ try:
 except ImportError:
     warnings.warn('PyTorch is not installed. Some features of utilsd might not work.')
 from .config.builtin import RuntimeConfig
+from .config.registry import RegistryConfig
 from .logging import mute_logger, print_log, setup_logger, reset_logger
 
 _runtime_config: Optional[RuntimeConfig] = None
@@ -94,7 +95,31 @@ def setup_experiment(runtime_config: RuntimeConfig, enable_nni: bool = False,
     return runtime_config
 
 
-def print_config(config, dump_config=True, output_dir=None, expand_config=True):
+def get_config_types(config):
+    type_dict = dict()
+    if isinstance(config, dict):
+        for key in config:
+            if isinstance(config[key], dict) or dataclasses.is_dataclass(config[key]):
+                value = get_config_types(config[key])
+                if len(value) != 0:
+                    type_dict[key] = value
+    elif dataclasses.is_dataclass(config):
+        type_dict["_config_type_module"] = type(config).__module__
+        type_dict["_config_type_name"] = type(config).__name__
+        try:
+            _type = config.type()
+            type_dict["_type_module"] = _type.__module__
+            type_dict["_type_name"] = _type.__name__
+        except (TypeError, AttributeError):
+            pass
+        for f in dataclasses.fields(config):
+            value = get_config_types(getattr(config, f.name))
+            if len(value) != 0:
+                type_dict[f.name] = value
+    return type_dict
+
+
+def print_config(config, dump_config=True, output_dir=None, expand_config=True, infer_types=False):
     class Encoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, Enum):
@@ -103,6 +128,10 @@ def print_config(config, dump_config=True, output_dir=None, expand_config=True):
                 return obj.as_posix()
             return super().default(obj)
 
+    if infer_types:
+        config_type = get_config_types(config)
+    else:
+        config_type = None
     if isinstance(config, dict):
         config_meta = None
     else:
@@ -116,12 +145,17 @@ def print_config(config, dump_config=True, output_dir=None, expand_config=True):
         print_log('Config (meta): ' + json.dumps(config_meta, cls=Encoder), __name__)
     if expand_config:
         print_log('Config (expanded):\n' + pprint.pformat(config), __name__)
+        if config_type is not None and len(config_type) != 0:
+            print_log('Config (types):\n' + pprint.pformat(config_type), __name__)
     if dump_config:
         with open(os.path.join(output_dir, 'config.json'), 'w') as fh:
             json.dump(config, fh, cls=Encoder)
         if config_meta is not None:
             with open(os.path.join(output_dir, 'config_meta.json'), 'w') as fh:
                 json.dump(config_meta, fh, cls=Encoder)
+        if config_type is not None and len(config_type) != 0:
+            with open(os.path.join(output_dir, 'config_type.json'), 'w') as fh:
+                json.dump(config_type, fh, cls=Encoder)
 
 
 def get_runtime_config():
