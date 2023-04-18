@@ -167,6 +167,7 @@ def dataclass_from_class(cls, *, inherent_signature=False):
         if param.kind == param.VAR_POSITIONAL:
             if inherent_signature:
                 # Prohibit uncollected positional varibles
+                # TODO: should positional params be banned from all use cases? 
                 raise TypeError(f'Use of positional params `*arg` in "{cls}" is prehibitted. Try to use `**kwargs` instead to avoid possible confusion.')
             continue
         if param.kind == param.VAR_KEYWORD:
@@ -221,6 +222,7 @@ def dataclass_from_class(cls, *, inherent_signature=False):
         result = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
         for k in kwargs:
             # silently overwrite the arguments with given ones.
+            # FIXME: add type check when building?
             result[k] = kwargs[k]
         try:
             return self._type(**result)
