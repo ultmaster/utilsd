@@ -165,7 +165,7 @@ class InhBase():
         self.uncollected = kwargs
         
 
-@TestInhReg.register_module(inherent=True)
+@TestInhReg.register_module(inherit=True)
 class InhChild1(InhBase):
     def __init__(self, c: int, d: int, **kwargs):
         super().__init__(**kwargs)
@@ -191,7 +191,7 @@ def test_superclass_registry():
     assert "InhChild1" in TestInhReg
     assert "InhChildNotDefined" not in TestInhReg
 
-    # when inherent is set True, the module will look back to its super class for areas
+    # when inherit is set True, the module will look back to its super class for areas
     config = TypeDef.load(
         InhRegCfg, dict(m=dict(type="InhChild1", a=1, b=2, c=3, d=4))
     )
@@ -201,14 +201,14 @@ def test_superclass_registry():
     assert config.m.build(e=5).uncollected['e'] == 5
 
     with pytest.raises(ValidationError):
-        # when inherent is set False (default), all the keys must be specifed in the param list of __init__
+        # when inherit is set False (default), all the keys must be specifed in the param list of __init__
         config = TypeDef.load(
             InhRegCfg, dict(m=dict(type="InhChild2", a=1, b=2, c=3, d=4))
         )
 
     with pytest.raises(ValidationError):
-        # when inherent is set True, use of positional arguments is banned to remove possible confusions
-        @TestInhReg.register_module(inherent=True)
+        # when inherit is set True, use of positional arguments is banned to remove possible confusions
+        @TestInhReg.register_module(inherit=True)
         class InhChildwithPosArgs(InhBase):
             def __init__(self, c: int, d: int, *args, **kwargs):
                 super().__init__(**kwargs)
@@ -221,7 +221,7 @@ def test_superclass_registry():
 
     TestInhReg.unregister_module("InhChildwithPosArgs")
 
-    # won't raise TypeError with *args when inherent is set False (default) TODO: should this use also be banned?
+    # won't raise TypeError with *args when inherit is set False (default) TODO: should this use also be banned?
     @TestInhReg.register_module()
     class InhChildwithPosArgs(InhBase):
         def __init__(self, a: int, b: int, c: int, d: int, *args, **kwargs):
