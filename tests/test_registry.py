@@ -3,6 +3,7 @@ from typing import Dict, Union
 import pytest
 from utilsd.config import ClassConfig, Registry, RegistryConfig, SubclassConfig, configclass
 from utilsd.config.type_def import TypeDef
+from utilsd.config.exception import ValidationError
 from tests.assets.import_class import BaseBar
 
 
@@ -84,6 +85,11 @@ def test_registry_config():
     assert config.m.a == 1
     assert config.m.type() == Converter1
     assert config.m.build().a == 1
+
+    # test overwrite during build() call
+    assert config.m.build(a=2).a == 2
+    with pytest.raises(RuntimeError):
+        config.m.build(c=3)
     assert isinstance(config.m.build(), Converter1)
 
 
@@ -145,3 +151,97 @@ def test_registry():
 
     Converters.register_module(module=Converter2)
     assert len(Converters) == 2
+
+
+class TestInhReg(metaclass=Registry, name='TestInh'):
+    pass
+
+
+@TestInhReg.register_module()
+class InhBase():
+    def __init__(self, a: int, b: int, **kwargs):
+        self.a = a
+        self.b = b
+        self.uncollected = kwargs
+        
+
+@TestInhReg.register_module(inherit=True)
+class InhChild1(InhBase):
+    def __init__(self, c: int, d: int, **kwargs):
+        super().__init__(**kwargs)
+        self.c = c
+        self.d = d
+
+
+@TestInhReg.register_module()
+class InhChild2(InhBase):
+    def __init__(self, c: int, d: int, **kwargs):
+        super().__init__(**kwargs)
+        self.c = c
+        self.d = d
+
+
+@configclass
+class InhRegCfg:
+    m: RegistryConfig[TestInhReg]
+
+
+def test_superclass_registry():
+    assert len(TestInhReg) == 3
+    assert "InhChild1" in TestInhReg
+    assert "InhChildNotDefined" not in TestInhReg
+
+    # when inherit is set True, the module will look back to its super class for areas
+    config = TypeDef.load(
+        InhRegCfg, dict(m=dict(type="InhChild1", a=1, b=2, c=3, d=4))
+    )
+    child1 = config.m.build()
+    assert child1.a == 1
+    assert child1.c == 3
+    assert config.m.build(e=5).uncollected['e'] == 5
+
+    with pytest.raises(ValidationError):
+        # when inherit is set False (default), all the keys must be specifed in the param list of __init__
+        config = TypeDef.load(
+            InhRegCfg, dict(m=dict(type="InhChild2", a=1, b=2, c=3, d=4))
+        )
+
+    with pytest.raises(ValidationError):
+        # when inherit is set True, use of positional arguments is banned to remove possible confusions
+        @TestInhReg.register_module(inherit=True)
+        class InhChildwithPosArgs(InhBase):
+            def __init__(self, c: int, d: int, *args, **kwargs):
+                super().__init__(**kwargs)
+                self.c = c
+                self.d = d
+
+        config = TypeDef.load(
+            InhRegCfg, dict(m=dict(type="InhChildwithPosArgs", a=1, b=2, c=3, d=4))
+        )
+
+    TestInhReg.unregister_module("InhChildwithPosArgs")
+
+    # won't raise TypeError with *args when inherit is set False (default) TODO: should this use also be banned?
+    @TestInhReg.register_module()
+    class InhChildwithPosArgs(InhBase):
+        def __init__(self, a: int, b: int, c: int, d: int, *args, **kwargs):
+            super().__init__(a=a, b=b)
+            self.c = c
+            self.d = d
+            self.uncollected_args = args
+
+    config = TypeDef.load(
+        InhRegCfg, dict(m=dict(type="InhChildwithPosArgs", a=1, b=2, c=3, d=4))
+    )
+    childwithPosArgs = config.m.build()
+    assert childwithPosArgs.uncollected_args == ()
+
+    with pytest.raises(ValidationError):
+        @TestInhReg.register_module()
+        class InhChildwithOverwriteArgs(InhBase):
+            def __init__(self, a: int, b: float):
+                super().__init__(a=a, b=int(b))
+                
+        config = TypeDef.load(
+            InhRegCfg, dict(m=dict(type="InhChildwithOverwriteArgs", a=1, b=2.5))
+        )
