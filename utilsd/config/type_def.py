@@ -584,9 +584,8 @@ class RegistryConfigDef(DataclassDef):
             raise TypeError(f'Expect a dict with key "type", but found {type(plain)}: {plain}')
         # copy the raw object to prevent unexpected modification
         plain = copy.copy(plain)
-
-        type_ = self.registry.get(plain.pop('type'))
-        dataclass = dataclass_from_class(type_)
+        type_, inherit = self.registry.get_module_with_inherit(plain.pop('type'))
+        dataclass = dataclass_from_class(type_, inherit_signature=inherit)
         return super().from_plain(plain, ctx, type_=dataclass)
 
     def to_plain(self, obj, ctx):
