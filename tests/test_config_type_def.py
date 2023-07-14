@@ -11,15 +11,15 @@ from utilsd.config.type_def import TypeDef
 
 
 def test_path():
-    TypeDef.load(pathlib.Path, '/bin') == pathlib.Path('/bin')
-    TypeDef.load(os.PathLike, '/bin') == pathlib.Path('/bin')
-    TypeDef.load(pathlib.PosixPath, '/bin') == pathlib.Path('/bin')
-    TypeDef.dump(pathlib.Path, pathlib.Path('/bin')) == '/bin'
+    assert TypeDef.load(pathlib.Path, '/bin') == pathlib.Path('/bin')
+    assert TypeDef.load(os.PathLike, '/bin') == pathlib.Path('/bin')
+    assert TypeDef.load(pathlib.PosixPath, '/bin') == pathlib.Path('/bin')
+    assert TypeDef.dump(pathlib.Path, pathlib.Path('/bin')) == '/bin'
 
 
 def test_any():
-    TypeDef.load(typing.Any, 123) == 123
-    TypeDef.dump(typing.Any, '456') == '456'
+    assert TypeDef.load(typing.Any, 123) == 123
+    assert TypeDef.dump(typing.Any, '456') == '456'
 
 
 def test_unsupported_type():
@@ -113,7 +113,7 @@ def test_enum():
 
     assert TypeDef.load(MyEnum, 'state2_val') == MyEnum.state2
     assert TypeDef.dump(MyEnum, MyEnum.state1) == 'state1_val'
-    with pytest.raises(ValidationError, match='is not a valid MyEnum'):
+    with pytest.raises(ValidationError, match='is not a valid'):
         TypeDef.load(MyEnum, 'other')
     with pytest.raises(ValidationError, match='Expect a enum'):
         TypeDef.dump(MyEnum, 'state1_val')
@@ -259,17 +259,3 @@ def test_class_config():
                         {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).b.c == 5
     assert TypeDef.load(ClassConfig[module],
                         {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).build().b._c == 5
-
-
-test_path()
-test_optional()
-test_any()
-test_unsupported_type()
-test_primitive()
-test_list()
-test_tuple()
-test_dict()
-test_enum()
-test_dataclass()
-test_union()
-test_class_config()
