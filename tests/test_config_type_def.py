@@ -22,6 +22,16 @@ def test_any():
     assert TypeDef.dump(typing.Any, '456') == '456'
 
 
+def test_none():
+    assert TypeDef.load(type(None), None) == None
+    assert TypeDef.dump(type(None), None) == None
+
+    with pytest.raises(ValidationError, match='must be NoneType'):
+        TypeDef.load(type(None), 1)
+    with pytest.raises(ValidationError, match='Expected None'):
+        TypeDef.dump(type(None), "123")
+
+
 def test_unsupported_type():
     with pytest.raises(TypeError, match=r'.*Callable\[\[\], str\].*'):
         TypeDef.load(typing.Callable[[], str], lambda x: x)
@@ -197,6 +207,29 @@ def test_union():
     assert TypeDef.dump(typing.Union[pathlib.Path, None], None) == None
 
 
+def test_complex_optional_union():
+    @dataclass
+    class Foo:
+        bar: int = 1
+
+    assert TypeDef.load(typing.Optional[typing.Union[pathlib.Path, Foo]], '/bin') == pathlib.Path('/bin')
+    assert TypeDef.load(typing.Optional[typing.Union[pathlib.Path, Foo]], {'bar': 2}).bar == 2
+    assert TypeDef.load(typing.Optional[typing.Union[pathlib.Path, Foo]], None) == None
+
+    assert TypeDef.load(typing.Union[pathlib.Path, Foo, type(None)], None) == None
+    with pytest.raises(ValidationError, match='are exhausted'):
+        TypeDef.load(typing.Union[pathlib.Path, Foo, type(None)], [1, 2.5, '3'])
+
+    with pytest.raises(ValidationError, match='are exhausted'):
+        TypeDef.dump(typing.Union[pathlib.Path, Foo, type(None)], "/bin")
+
+    assert TypeDef.dump(typing.Optional[typing.Union[pathlib.Path, str]], '/bin') == '/bin'
+    assert TypeDef.dump(typing.Optional[typing.Union[pathlib.Path, Foo]], Foo(bar=2))['bar'] == 2
+    assert TypeDef.dump(typing.Optional[typing.Union[pathlib.Path, Foo]], None) == None
+
+    assert TypeDef.dump(typing.Union[pathlib.Path, Foo, type(None)], None) == None
+
+
 def test_class_config():
     class module:
         def __init__(self, a, b, c=1):
@@ -259,3 +292,4 @@ def test_class_config():
                         {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).b.c == 5
     assert TypeDef.load(ClassConfig[module],
                         {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).build().b._c == 5
+

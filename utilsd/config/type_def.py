@@ -209,6 +209,24 @@ class AnyDef(TypeDef):
         return obj
 
 
+class NoneTypeDef(TypeDef):
+    @classmethod
+    def new(cls, type_):
+        if type_ is type(None):
+            return cls(type_)
+        return None
+
+    def from_plain(self, plain, ctx):
+        ctx.mark_cli_anchor_point(type(None))
+        return plain
+
+    def to_plain(self, obj, ctx):
+        if obj is None:
+            return None
+        else:
+            raise TypeError(f'Expected None, got {obj}')
+
+
 class OptionalDef(TypeDef):
     @classmethod
     def new(cls, type_):
@@ -660,6 +678,7 @@ class SubclassConfigDef(DataclassDef):
 
 # register all the modules in this file
 TypeDefRegistry.register_module(module=AnyDef)
+TypeDefRegistry.register_module(module=NoneTypeDef)
 TypeDefRegistry.register_module(module=OptionalDef)
 TypeDefRegistry.register_module(module=PathDef)
 TypeDefRegistry.register_module(module=ListDef)
