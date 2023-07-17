@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Union
 
 from utilsd.config import PythonConfig, Registry, RegistryConfig, SubclassConfig, configclass
 from unittest.mock import patch
@@ -38,9 +38,10 @@ class TEST(metaclass=Registry, name="test"):
 
 @TEST.register_module()
 class Module1:
-    def __init__(self, a: int = 1, b: Optional[str] = None):
+    def __init__(self, a: int = 1, b: Optional[str] = None, c: Union[str, BaseFoo, None] = None):
         self.a = a
         self.b = b
+        self.c = c
 
 
 @configclass
@@ -100,4 +101,5 @@ def test_registry_config_command_line():
 
 
 if __name__ == '__main__':
-    test_cli_with_bool()
+    # test_cli_with_bool()
+    test_registry_config_command_line()
