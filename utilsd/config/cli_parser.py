@@ -59,7 +59,7 @@ class CliContext:
 
             if not isinstance(shortcut, list):
                 raise TypeError(f'Shortcut of {name} is not found to be a list: {shortcut}')
-            
+
             if type_ is type(None):
                 # ignore None type when building parser
                 pass
