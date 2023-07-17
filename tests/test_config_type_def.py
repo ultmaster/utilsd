@@ -293,18 +293,3 @@ def test_class_config():
     assert TypeDef.load(ClassConfig[module],
                         {'a': {'a': 1, 'b': 2}, 'b': {'a': 3, 'b': 4, 'c': 5}}).build().b._c == 5
 
-
-test_path()
-test_optional()
-test_any()
-test_none()
-test_unsupported_type()
-test_primitive()
-test_list()
-test_tuple()
-test_dict()
-test_enum()
-test_dataclass()
-test_union()
-test_complex_optional_union()
-test_class_config()
