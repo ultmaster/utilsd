@@ -60,7 +60,10 @@ class CliContext:
             if not isinstance(shortcut, list):
                 raise TypeError(f'Shortcut of {name} is not found to be a list: {shortcut}')
 
-            if issubclass(type_, Enum):
+            if type_ is type(None):
+                # ignore None type when building parser
+                pass
+            elif issubclass(type_, Enum):
                 parser.add_argument('--' + name, *shortcut, dest=name, type=str, metavar='STRING',
                                     default=SUPPRESS, choices=[e.value for e in type_])
             elif type_ in (int, str, float, bool, list, dict):

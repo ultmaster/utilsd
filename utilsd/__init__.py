@@ -4,4 +4,4 @@ from .experiment import (get_checkpoint_dir, get_output_dir, get_runtime_config,
 from .fileio import load, dump
 from .logging import print_log, setup_logger
 
-__version__ = '0.0.17'
+__version__ = '0.0.18.post0'
