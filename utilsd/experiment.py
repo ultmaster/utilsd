@@ -2,6 +2,7 @@ import dataclasses
 import json
 import logging
 import os
+import sys
 import pprint
 import random
 import warnings
@@ -12,8 +13,10 @@ from typing import Optional, List
 import numpy as np
 try:
     import torch
+    _use_torch = True
 except ImportError:
     warnings.warn('PyTorch is not installed. Some features of utilsd might not work.')
+    _use_torch = False
 from .config.builtin import RuntimeConfig
 from .config.registry import RegistryConfig
 from .logging import mute_logger, print_log, setup_logger, reset_logger
@@ -23,11 +26,12 @@ _use_cuda: Optional[bool] = None
 
 
 def seed_everything(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     random.seed(seed)
-    torch.backends.cudnn.deterministic = True
+    if _use_torch or "torch" in sys.modules:
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
 
 
 def setup_distributed_training():
