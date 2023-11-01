@@ -51,7 +51,7 @@ def test_setup_experiment():
 
         # Check that PyTorch is using CUDA if available
         if test_torch or "torch" in sys.modules:
-            assert use_cuda() == runtime_config_to_check.use_cuda and torch.cuda.is_available()
+            assert use_cuda() == (runtime_config_to_check.use_cuda and torch.cuda.is_available())
 
 
 from tests.assets.exp_config.RegClass import DummyReg, Reg
