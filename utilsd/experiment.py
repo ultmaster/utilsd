@@ -123,7 +123,7 @@ def get_config_types(config):
     return type_dict
 
 
-def print_config(config, dump_config=True, output_dir=None, expand_config=True, infer_types=False):
+def print_config(config, dump_config=True, output_dir=None, expand_config=True, retain_types=False):
     class Encoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, Enum):
@@ -132,7 +132,7 @@ def print_config(config, dump_config=True, output_dir=None, expand_config=True, 
                 return obj.as_posix()
             return super().default(obj)
 
-    if infer_types:
+    if retain_types:
         config_type = get_config_types(config)
     else:
         config_type = None

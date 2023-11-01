@@ -103,7 +103,7 @@ def test_get_config_types():
 def test_print_config():
     # Print the configuration
     with tempfile.TemporaryDirectory() as tmpdir:
-        print_config(config, output_dir=tmpdir, infer_types=True)
+        print_config(config, output_dir=tmpdir, retain_types=True)
 
         with open(os.path.join(tmpdir, "config.json")) as fh:
             config_to_check = json.load(fh)        
